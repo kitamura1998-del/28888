@@ -1,0 +1,12 @@
+{
+  "name": "two-and-eight-online",
+  "version": "1.0.0",
+  "description": "2と8 — online multiplayer (authoritative server)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
