@@ -48,12 +48,14 @@ function makeCode(){
   return c;
 }
 function newRoom(){
-  return { code: makeCode(), seats:[null,null,null,null], hostId:null, state:null, started:false, timer:null, nextTimer:null, nextReady:[] };
+  return { code: makeCode(), seats:[null,null,null,null], hostId:null, state:null, started:false,
+           timer:null, nextTimer:null, nextReady:[],
+           config:{ players:4, deal:5, ronReturn:false } };
 }
-function firstEmptySeat(room){ for(let i=0;i<4;i++) if(!room.seats[i]) return i; return -1; }
-function seatOfClient(room, id){ for(let i=0;i<4;i++) if(room.seats[i] && room.seats[i].id===id) return i; return -1; }
+function firstEmptySeat(room){ for(let i=0;i<room.seats.length;i++) if(!room.seats[i]) return i; return -1; }
+function seatOfClient(room, id){ for(let i=0;i<room.seats.length;i++) if(room.seats[i] && room.seats[i].id===id) return i; return -1; }
 function roomInfo(room){
-  return { code:room.code, hostId:room.hostId, started:room.started,
+  return { code:room.code, hostId:room.hostId, started:room.started, config:room.config,
     seats: room.seats.map(s => s ? { id:s.id, name:s.name, isAI:!!s.isAI, connected:!!s.connected } : null) };
 }
 function connectedHumans(room){ return room.seats.filter(s => s && !s.isAI && s.connected); }
@@ -105,7 +107,7 @@ function broadcastEvents(room, events){
 
 /* ---------------- game flow ---------------- */
 function startRound(room, startSeat){
-  if(!room.state) room.state = Engine.newMatch(null);
+  if(!room.state) room.state = Engine.newMatch(null, room.config);
   var r = Engine.startRound(room.state, startSeat, Math.random);
   room.state = r.state;
   broadcastState(room, startSeat);
@@ -115,7 +117,16 @@ function startRound(room, startSeat){
 
 function advance(room){
   if(room.timer){ clearTimeout(room.timer); room.timer=null; }
-  const s = room.state; if(!s) return;
+  let s = room.state; if(!s) return;
+  // AI seats (and disconnected players) auto-declare "ワン" the instant they hit 1 card,
+  // so they are never perpetually hit by the ワンペナルティ. Connected humans must tap the button.
+  for(let i=0;i<room.seats.length;i++){
+    const so = room.seats[i];
+    if(so && (so.isAI || !so.connected) && s.players[i] && s.players[i].hand.length===1 && !s.players[i].calledOne){
+      const r = Engine.apply(s, { type:"callOne", seat:i });
+      if(!r.error){ room.state = r.state; s = r.state; broadcastEvents(room, r.events); }
+    }
+  }
   const pend = Engine.pending(s);
   if(pend.kind === "roundover"){
     // Wait for EVERY connected human to press "next" before starting the next round.
@@ -137,15 +148,17 @@ function advance(room){
       let action;
       if(pend.kind === "turn") action = Engine.aiPlayAction(s, pend.seat);
       else if(pend.kind === "suit") action = Engine.aiSuitAction(s, pend.seat);
-      else { var calls=["\u30ed\u30f3","\u30c0\u30e1\u301c","\u3054\u9a70\u8d70\u69d8\u3002","\u6d45\u306f\u304b\u3067\u3059\u3002"]; action = { type:"ron", call:calls[Math.floor(Math.random()*calls.length)] }; }
+      else if(pend.kind === "ronReturn") action = { type:"ronReturn", call:"\u30ed\u30f3\u8fd4\u3057" };  // always beneficial -> auto
+      else { if(pend.drawTriggered){ action = { type:"ron", call:"\u5f15\u304d\u30ed\u30f3" }; } else { var calls=["\u30ed\u30f3","\u30c0\u30e1\u301c","\u3054\u9a70\u8d70\u69d8\u3002","\u304a\u75b2\u308c\u69d8\u3002","\u4f55\u8272\u3067\u3059\u304b\uff1f"]; action = { type:"ron", call:calls[Math.floor(Math.random()*calls.length)] }; } }
       doAction(room, pend.seat, action);
     }, AI_DELAY);
   } else {
     // wait for the human, but guard against AFK so the game never stalls
-    const ms = (pend.kind === "ron") ? RON_TIMEOUT : TURN_TIMEOUT;
+    const ms = (pend.kind === "ron" || pend.kind === "ronReturn") ? RON_TIMEOUT : TURN_TIMEOUT;
     room.timer = setTimeout(() => {
       let action;
       if(pend.kind === "ron") action = { type:"pass" };
+      else if(pend.kind === "ronReturn") action = { type:"ronReturn", call:"\u30ed\u30f3\u8fd4\u3057" };  // auto-take the win
       else if(pend.kind === "suit") action = Engine.aiSuitAction(s, pend.seat);
       else action = { type:"draw" };  // AFK on your turn -> draw
       doAction(room, pend.seat, action);
@@ -163,6 +176,14 @@ function doAction(room, seat, action){
   room.state = res.state;
   broadcastEvents(room, res.events);
   advance(room);
+}
+
+function doCallOne(room, seat){
+  const s = room.state; if(!s) return;
+  const res = Engine.apply(s, { type:"callOne", seat:seat });
+  if(res.error){ return; }
+  room.state = res.state;
+  broadcastEvents(room, res.events);   // no advance(): declaring "ワン" doesn't change whose turn it is
 }
 
 /* ---------------- websocket handlers ---------------- */
@@ -197,10 +218,34 @@ wss.on("connection", (ws) => {
     if(m.type === "start"){
       const room = rooms[client.room]; if(!room || room.started) return;
       if(seatOfClient(room, client.id) < 0) return;   // must be seated in the room
-      for(let i=0;i<4;i++){ if(!room.seats[i]) room.seats[i] = { id:"ai"+i, name:"CPU", isAI:true, connected:true, ws:null }; }
+      const N = room.config.players;
+      for(let i=0;i<N;i++){ if(!room.seats[i]) room.seats[i] = { id:"ai"+i, name:"CPU", isAI:true, connected:true, ws:null }; }
+      room.seats.length = N;                           // trim any extra slots
       room.started = true;
+      room.state = Engine.newMatch(null, room.config); // build the match with the chosen rules
       broadcastRoom(room);
-      startRound(room, Math.floor(Math.random()*4));
+      startRound(room, Math.floor(Math.random()*N));
+      return;
+    }
+
+    if(m.type === "config"){
+      const room = rooms[client.room]; if(!room || room.started) return;
+      if(room.hostId !== client.id) return;            // host only
+      const cfg = m.config || {};
+      if(cfg.players != null){
+        const P = Math.max(3, Math.min(5, cfg.players|0));
+        // don't shrink past a seated human
+        let ok = true;
+        for(let i=P;i<room.seats.length;i++){ if(room.seats[i] && !room.seats[i].isAI){ ok=false; break; } }
+        if(!ok){ sendTo(ws, { type:"error", msg:"その人数だと座っている人がはみ出します" }); }
+        else {
+          const ns=[]; for(let i=0;i<P;i++) ns[i]=room.seats[i]||null; room.seats=ns;
+          room.config.players=P;
+        }
+      }
+      if(cfg.deal===4 || cfg.deal===5) room.config.deal=cfg.deal;
+      if(typeof cfg.ronReturn === "boolean") room.config.ronReturn=cfg.ronReturn;
+      broadcastRoom(room);
       return;
     }
 
@@ -208,6 +253,13 @@ wss.on("connection", (ws) => {
       const room = rooms[client.room]; if(!room || !room.started) return;
       const seat = seatOfClient(room, client.id); if(seat < 0) return;
       doAction(room, seat, m.action || {});
+      return;
+    }
+
+    if(m.type === "callOne"){
+      const room = rooms[client.room]; if(!room || !room.started) return;
+      const seat = seatOfClient(room, client.id); if(seat < 0) return;
+      doCallOne(room, seat);
       return;
     }
 
