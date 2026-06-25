@@ -124,7 +124,8 @@ var Engine = (function(){
     }
     s.players[winner].score+=pot;
     rows.forEach(function(r){ if(r.win) r.delta=pot; });
-    s.result={winner:winner,rows:rows,starterMult:sM,comboMult:cM,tenpoMult:tM,starter:s.starter,ronTarget:s.ronTarget,pot:pot};
+    var hands=[]; for(var hi=0;hi<4;hi++){ hands.push(s.players[hi].hand.map(function(c){return {suit:c.suit,rank:c.rank};})); }
+    s.result={winner:winner,rows:rows,starterMult:sM,comboMult:cM,tenpoMult:tM,starter:s.starter,ronTarget:s.ronTarget,pot:pot,hands:hands};
     s.lastWinner=winner; s.phase="roundover";
   }
 
@@ -150,7 +151,8 @@ var Engine = (function(){
     for(var st=0; st<3; st++){ give(s, sd, 2*count, events); sd=nextSeat(sd); }
     if(follow){
       var ctxF={kind:"twoFollow", placer:placer, follow:follow, count:count};
-      if(!checkRonOr(s, placer, follow.rank, ctxF, events)) contTwoFollow(s, placer, follow, count, events);
+      // everyone just drew their 2-penalty cards above, so any RON found here is a "引きロン" (drawn into it)
+      if(!checkRonOr(s, placer, follow.rank, ctxF, events, true)) contTwoFollow(s, placer, follow, count, events);
     } else {
       events.push({t:"penaltyDraw", seat:placer});
       give(s, placer, 1, events);
@@ -165,11 +167,11 @@ var Engine = (function(){
     else if(ctx.kind==="twoNoFollow") contTwoNoFollow(s, ctx.placer, ctx.count, events);
   }
 
-  function checkRonOr(s, placer, byRank, ctx, events){
+  function checkRonOr(s, placer, byRank, ctx, events, drawTriggered){
     var cand=ronCandidate(s, placer, byRank);
     if(cand>=0){
-      s.phase="ron"; s.ron={candidate:cand, byRank:byRank, placer:placer, ctx:ctx};
-      events.push({t:"ronAvailable", seat:cand, byRank:byRank, placer:placer});
+      s.phase="ron"; s.ron={candidate:cand, byRank:byRank, placer:placer, ctx:ctx, drawTriggered:!!drawTriggered};
+      events.push({t:"ronAvailable", seat:cand, byRank:byRank, placer:placer, drawTriggered:!!drawTriggered});
       return true;
     }
     return false;
@@ -224,8 +226,17 @@ var Engine = (function(){
     if(action.type==="ron"){
       if(s.phase!=="ron") return {state:state, events:[], error:"no ron pending"};
       var r=s.ron; s.ronTarget=r.placer;
-      events.push({t:"ron", seat:r.candidate, byRank:r.byRank, placer:r.placer, call:(action.call||"\u30ed\u30f3")});
-      scoreRound(s, r.candidate);
+      events.push({t:"ron", seat:r.candidate, byRank:r.byRank, placer:r.placer, call:(action.call||"\u30ed\u30f3"), drawTriggered:!!r.drawTriggered});
+      // the 2 players NOT involved each hand their single highest card to the ron'd player
+      for(var gi=0; gi<4; gi++){
+        if(gi===r.candidate || gi===r.placer) continue;
+        var gp=s.players[gi]; if(!gp.hand.length) continue;
+        var hiIdx=0; for(var hk=1; hk<gp.hand.length; hk++){ if(gp.hand[hk].rank>gp.hand[hiIdx].rank) hiIdx=hk; }
+        var gift=gp.hand.splice(hiIdx,1)[0];
+        s.players[r.placer].hand.push(gift);
+        events.push({t:"ronGift", from:gi, to:r.placer, card:gift});
+      }
+      scoreRound(s, r.candidate);   // score AFTER the transfer (ron'd hand bigger, givers smaller)
       events.push({t:"roundOver"});
       s.ron=null;
       return {state:s, events:events};
@@ -243,7 +254,7 @@ var Engine = (function(){
   function pending(s){
     if(s.phase==="turn") return {kind:"turn", seat:s.turn};
     if(s.phase==="suit") return {kind:"suit", seat:s.suitChooser};
-    if(s.phase==="ron") return {kind:"ron", seat:s.ron.candidate};
+    if(s.phase==="ron") return {kind:"ron", seat:s.ron.candidate, drawTriggered:!!s.ron.drawTriggered};
     if(s.phase==="roundover") return {kind:"roundover"};
     return {kind:"idle"};
   }
@@ -282,7 +293,7 @@ var Engine = (function(){
     var s=clone(state);
     s.players=s.players.map(function(p,i){ return {score:p.score, count:p.hand.length, hand:(i===seat?p.hand:null)}; });
     s.deckCount=state.deck.length; s.deck=undefined;
-    if(s.ron){ s.ron={candidate:s.ron.candidate, byRank:s.ron.byRank, placer:s.ron.placer}; }
+    if(s.ron){ s.ron={candidate:s.ron.candidate, byRank:s.ron.byRank, placer:s.ron.placer, drawTriggered:!!s.ron.drawTriggered}; }
     return s;
   }
 
