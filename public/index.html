@@ -73,9 +73,12 @@
   .felt{
     position:absolute;inset:0;
     background:
-      radial-gradient(120% 100% at 50% 36%, rgba(255,255,255,.06), transparent 55%);
-    box-shadow:inset 0 0 120px rgba(0,0,0,.32);
+      radial-gradient(130% 95% at 50% 30%, rgba(255,255,255,.10), rgba(255,255,255,0) 42%),
+      radial-gradient(120% 120% at 50% 52%, #1c6a4e 0%, #14543d 46%, #0d3d2c 78%, #0a3325 100%);
+    box-shadow:inset 0 0 160px rgba(0,0,0,.42), inset 0 0 40px rgba(0,0,0,.25);
   }
+  .felt::after{ content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(60% 42% at 50% 56%, rgba(255,255,255,.05), transparent 70%); }
 
   .seat{position:absolute;display:flex;flex-direction:column;align-items:center;z-index:2}
   .avatar{
@@ -210,6 +213,15 @@
   .seat .nameplate .pts{font-weight:800;font-variant-numeric:tabular-nums;color:#ffe7a6}
   .seat .nameplate .pts.pos{color:var(--good)}
   .seat .nameplate .pts.neg{color:var(--bad)}
+  .seat .chipstack{display:inline-flex;align-items:center;height:14px;margin-left:7px}
+  .seat .chipstack .cdisc{
+    width:13px;height:13px;border-radius:50%;margin-left:-6px;
+    background:radial-gradient(circle at 50% 32%, #ffe08a, #e89a2c 70%, #b9711a);
+    border:2px dashed rgba(255,255,255,.85);
+    box-shadow:0 1px 3px rgba(0,0,0,.55), inset 0 -1px 2px rgba(0,0,0,.3);
+  }
+  .seat .chipstack .cdisc:first-child{margin-left:0}
+  .seat .chipstack .cdisc.lead{background:radial-gradient(circle at 50% 32%, #fff0b8, #f0c14b 70%, #c79a33)}
   @keyframes blink{50%{opacity:.25}}
 
   /* seat positions */
@@ -283,7 +295,7 @@
 
   /* ---------- Center ---------- */
   #center{
-    position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);
+    position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);
     display:flex;align-items:center;gap:26px;z-index:1;
   }
   .pile{display:flex;flex-direction:column;align-items:center;gap:7px}
@@ -490,6 +502,13 @@
 
   /* result */
   .result-rows{display:flex;flex-direction:column;gap:8px;margin:14px 0 18px;text-align:left}
+  .reveal-hand{display:flex;flex-wrap:wrap;gap:3px;margin:-3px 0 6px 2px}
+  .mini-card{min-width:22px;height:30px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,#ffffff,#efe7d4);color:var(--ink);border-radius:4px;font-size:12px;font-weight:800;
+    box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 0 0 1px rgba(0,0,0,.08)}
+  .mini-card.red{color:var(--red)}
+  .reveal-empty{font-size:11.5px;color:var(--muted);opacity:.85;align-self:center}
+  .fly-gift{position:fixed;z-index:75;pointer-events:none;will-change:transform,opacity}
   .rrow{display:flex;justify-content:space-between;align-items:center;
     background:var(--panel);border:1px solid var(--panel-line);border-radius:10px;padding:9px 14px;font-size:14px}
   .rrow .who{font-weight:700}
@@ -589,21 +608,21 @@
     <div class="seat" id="seat-top">
       <div class="avatar">🐶<span class="av-mult hidden"></span></div>
       <div class="nm">正面</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span></div>
+      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
       <div class="oppo-hand"></div>
       <div class="bubble"><div class="bubble-inner"></div></div>
     </div>
     <div class="seat" id="seat-left">
       <div class="avatar">🐹<span class="av-mult hidden"></span></div>
       <div class="nm">左</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span></div>
+      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
       <div class="oppo-hand"></div>
       <div class="bubble"><div class="bubble-inner"></div></div>
     </div>
     <div class="seat" id="seat-right">
       <div class="avatar">🐰<span class="av-mult hidden"></span></div>
       <div class="nm">右</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span></div>
+      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
       <div class="oppo-hand"></div>
       <div class="bubble"><div class="bubble-inner"></div></div>
     </div>
@@ -631,7 +650,7 @@
     <div class="seat" id="seat-bottom">
       <div class="avatar">🐱<span class="av-mult hidden"></span></div>
       <div class="nm">あなた</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span></div>
+      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
       <div class="bubble"><div class="bubble-inner"></div></div>
     </div>
 
@@ -735,6 +754,7 @@
           <p style="margin:8px 0"><b>2 and 8</b> ── 2にそえ札として8を出すと「2 and 8!!」発動。失点倍率に×2（起きるたび累積：×2→×4→…）。スタート札の倍率とも掛け算される。</p>
           <p style="margin:8px 0"><b>点数</b> ── 誰かが上がったら終了。残り3人は手札の数字の合計がマイナス点、上がった人はその合計をプラスでもらう。持ち点は引き継いで次ゲームへ。</p>
           <p style="margin:8px 0"><b>ロン</b> ── 他の人が出したカードの数字と、自分の手札の数字の合計が一致したら、手番に関係なく「ロン」で即勝ち。複数人が同時に該当したら、次の手番が近い人が優先。ロンされた人（その札を出した人）は失点が×2になる。</p>
+          <p style="margin:8px 0"><b>引きロン</b> ── 2にそえ札を出されたとき、そのペナルティで引いた札を加えた手札の合計が「そえ札の数字」と一致したら、引いたあとに「引きロン」で即勝ちできる（例：♠1を持っていて、右隣が2＋そえ札13を出し、引いた❤7と❤5を加えて合計13になったら引きロン）。このときボタンは「引きロン」のみ。</p>
           <p style="margin:8px 0"><b>スタート札の倍率</b> ── 最初に表になった場札が 10/J/Q なら負けた人の失点が×2、K なら×3、♠A なら×5。（ロンされた人はさらに×2＝♠Aなら×10）</p>
         </div>
         <button class="start-btn" id="btn-rules-close" style="margin-top:16px;width:100%">とじる</button>
@@ -837,7 +857,7 @@
     setTimeout(function(){el.classList.add("hidden");el.classList.remove("play");},1150); }
   function showTaunt(text){ var el=document.getElementById("taunt-fx"); document.getElementById("tf-word").textContent=text;
     el.classList.remove("play");el.classList.remove("hidden"); void el.offsetWidth; el.classList.add("play"); setTimeout(function(){el.classList.add("hidden");el.classList.remove("play");},1500); }
-  var RON_CALLS=["\u30ed\u30f3","\u30c0\u30e1\u301c","\u3054\u9a70\u8d70\u69d8\u3002","\u6d45\u306f\u304b\u3067\u3059\u3002"];
+  var RON_CALLS=["\u30ed\u30f3","\u30c0\u30e1\u301c","\u3054\u9a70\u8d70\u69d8\u3002","\u304a\u75b2\u308c\u69d8\u3002","\u4f55\u8272\u3067\u3059\u304b\uff1f"];
   function flyDrawTo(seat){ try{ var deckEl=document.getElementById("deck"); if(deckEl){ deckEl.classList.remove("drawing"); void deckEl.offsetWidth; deckEl.classList.add("drawing"); }
     var target=domSeat(seat); if(!deckEl||!target) return; var dr=deckEl.getBoundingClientRect(),tr=target.getBoundingClientRect();
     var fly=document.createElement("div");fly.className="fly-card";document.body.appendChild(fly);
@@ -845,6 +865,18 @@
     var dx=(tr.left+tr.width/2)-(dr.left+dr.width/2),dy=(tr.top+tr.height/2)-(dr.top+dr.height/2);
     fly.style.transition="transform .4s cubic-bezier(.4,.1,.2,1), opacity .4s"; fly.style.transform="translate("+dx+"px,"+dy+"px) rotateY(180deg) scale(.62)"; fly.style.opacity="0.15";
     setTimeout(function(){ if(fly.parentNode) fly.parentNode.removeChild(fly); },460); }catch(e){} }
+
+  function flySeatToSeat(from, to, card){ try{
+    var a=domSeat(from), b=domSeat(to); if(!a||!b) return;
+    var ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
+    var fly=document.createElement("div"); fly.className="fly-gift";
+    var face=document.createElement("div"); face.className="mini-card"+(RED[card.suit]?" red":""); face.textContent=cardLabel(card); fly.appendChild(face);
+    document.body.appendChild(fly);
+    fly.style.left=(ar.left+ar.width/2-16)+"px"; fly.style.top=(ar.top+ar.height/2-22)+"px"; fly.style.transform="scale(1)"; void fly.offsetWidth;
+    var dx=(br.left+br.width/2)-(ar.left+ar.width/2), dy=(br.top+br.height/2)-(ar.top+ar.height/2);
+    fly.style.transition="transform .58s cubic-bezier(.35,.1,.2,1), opacity .58s";
+    fly.style.transform="translate("+dx+"px,"+dy+"px) scale(.78) rotate(10deg)"; fly.style.opacity="0.25";
+    setTimeout(function(){ if(fly.parentNode) fly.parentNode.removeChild(fly); },620); }catch(e){} }
 
   /* ---------- render ---------- */
   var selected=[];
@@ -861,13 +893,18 @@
     var sm=Engine.starterMult(s)*(s.comboMult||1); var tier=sm>=5?3:sm>=3?2:1;
     Array.prototype.forEach.call(document.querySelectorAll(".av-mult"),function(el){ el.className="av-mult tier"+tier+(sm>1?"":" hidden"); if(sm>1) el.textContent=sm+"\u500d"; });
     var activeSeat=(s.phase==="turn")?s.turn:-1;
+    var maxScore=-Infinity, leader=-1;
+    for(var t=0;t<4;t++){ if(s.players[t].score>maxScore){ maxScore=s.players[t].score; leader=t; } }
     for(var seat=0; seat<4; seat++){
       var pos=screenPos(seat), el=domSeatByPos(pos);
       el.querySelector(".nm").textContent=playerName(seat);
       el.querySelector(".cnt").textContent="\u624b "+handCount(s,seat);
       var pts=el.querySelector(".pts"); var sc=s.players[seat].score; pts.textContent=(sc>0?"+":"")+sc; pts.className="pts "+(sc>0?"pos":sc<0?"neg":"");
+      var cs=el.querySelector(".chipstack");
+      if(cs){ cs.innerHTML=""; if(sc>0){ var isLead=(seat===leader); var n=Math.min(7, 1+Math.floor(sc/100));
+        for(var d=0; d<n; d++){ var disc=document.createElement("span"); disc.className="cdisc"+(isLead?" lead":""); cs.appendChild(disc); } } }
       el.classList.toggle("active", activeSeat===seat);
-      if(pos!==0){ var oh=el.querySelector(".oppo-hand"); oh.innerHTML=""; var n=Math.min(handCount(s,seat),7); for(var k=0;k<n;k++){var b=document.createElement("div");b.className="cardback";oh.appendChild(b);} }
+      if(pos!==0){ var oh=el.querySelector(".oppo-hand"); oh.innerHTML=""; var n2=Math.min(handCount(s,seat),7); for(var k=0;k<n2;k++){var b=document.createElement("div");b.className="cardback";oh.appendChild(b);} }
     }
     // your hand (fanned)
     var handEl=document.getElementById("hand"); handEl.innerHTML="";
@@ -916,10 +953,11 @@
     case "rainbow": showRainbow(); setStatus("\u30ec\u30a4\u30f3\u30dc\u30fc\uff01 \u6b21\u306f\u597d\u304d\u306a\u30ab\u30fc\u30c9\u3092\u51fa\u305b\u308b"); break;
     case "starterIntro": showStarterIntro(ev.mult); break;
     case "tenpo": showTenpo(ev.seat, ev.mult); break;
-    case "ron": playRonFanfare(); showTaunt(ev.call||"\u30ed\u30f3"); showBubble(ev.seat,(ev.call||"\u30ed\u30f3")+"\uff01",{gold:true}); break; } }
+    case "ron": playRonFanfare(); showTaunt(ev.call||"\u30ed\u30f3"); showBubble(ev.seat,(ev.call||"\u30ed\u30f3")+"\uff01",{gold:true}); break;
+    case "ronGift": flySeatToSeat(ev.from, ev.to, ev.card); playCardSound(); showBubble(ev.from, cardLabel(ev.card)+"\u3092\u9032\u4e0a", {red:RED[ev.card.suit]}); break; } }
   function delayFor(ev){ switch(ev.t){ case "place":return 480; case "combo":return 1500; case "penaltyDraw":return 250; case "starter2":return 300; case "twoEffect":return 220;
     case "starterIntro":return 1250; case "tenpo":return 1850; case "rainbow":return 1050;
-    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; default:return 60; } }
+    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; default:return 60; } }
 
   function enqueue(events, state){ queue.push({events:events, state:state}); if(!animating) drain(); }
   function drain(){
@@ -944,9 +982,13 @@
     rb.onclick=function(){ hide("suit-overlay"); sendAction({type:"chooseSuit",suit:"rainbow"}); }; grid.appendChild(rb);
     show("suit-overlay"); }
   function showRonUI(){ pendingRon=true; playRonFanfare();
-    document.getElementById("ron-sub").textContent=playerName(liveState.ron.placer)+"\u304c\u51fa\u3057\u305f "+liveState.ron.byRank+" \u3068\u3001\u3042\u306a\u305f\u306e\u624b\u672d\u5408\u8a08\uff08"+Engine.handSum(liveState.players[yourSeat])+"\uff09\u304c\u4e00\u81f4\uff01";
+    var dt = !!(liveState.ron && liveState.ron.drawTriggered);
+    document.getElementById("ron-sub").textContent = dt
+      ? ("\u5f15\u3044\u305f\u672d\u3067\u624b\u672d\u5408\u8a08\u304c "+liveState.ron.byRank+" \u306b\uff01 \u300c\u5f15\u304d\u30ed\u30f3\u300d\u304c\u3067\u304d\u307e\u3059")
+      : (playerName(liveState.ron.placer)+"\u304c\u51fa\u3057\u305f "+liveState.ron.byRank+" \u3068\u3001\u3042\u306a\u305f\u306e\u624b\u672d\u5408\u8a08\uff08"+Engine.handSum(liveState.players[yourSeat])+"\uff09\u304c\u4e00\u81f4\uff01");
     var box=document.getElementById("ron-calls"); if(box){ box.innerHTML="";
-      RON_CALLS.forEach(function(call,idx){ var b=document.createElement("button"); b.className="ron-call-btn"+(idx===0?" ron":"");
+      var list = dt ? ["\u5f15\u304d\u30ed\u30f3"] : RON_CALLS;
+      list.forEach(function(call,idx){ var b=document.createElement("button"); b.className="ron-call-btn"+(idx===0?" ron":"");
         b.textContent=call+(idx===0?"\uff01":""); b.onclick=function(){ ronWith(call); }; box.appendChild(b); }); }
     show("ron-overlay"); }
   function ronWith(call){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"ron", call:call}); }
@@ -958,7 +1000,11 @@
     var rc=document.getElementById("result-rows"); rc.innerHTML="";
     res.rows.forEach(function(r){ var div=document.createElement("div"); div.className="rrow"+(r.win?" win":""); var dstr=(r.delta>0?"+":"")+r.delta;
       var detail=r.win?"\u4e0a\u304c\u308a":("\u624b\u672d "+r.sum+(r.mult>1?("\uff08"+r.mult+"\u500d"+(r.ron?"\u30fb\u30ed\u30f3":"")+"\uff09"):""));
-      div.innerHTML='<span class="who">'+playerName(r.seat)+' <small>'+detail+'</small></span><span class="delta '+(r.delta>=0?"pos":"neg")+'">'+dstr+'</span>'; rc.appendChild(div); });
+      div.innerHTML='<span class="who">'+playerName(r.seat)+' <small>'+detail+'</small></span><span class="delta '+(r.delta>=0?"pos":"neg")+'">'+dstr+'</span>'; rc.appendChild(div);
+      if(res.hands && res.hands[r.seat]){ var hs=document.createElement("div"); hs.className="reveal-hand";
+        if(res.hands[r.seat].length===0){ var z=document.createElement("span"); z.className="reveal-empty"; z.textContent="\u624b\u672d\u306a\u3057"; hs.appendChild(z); }
+        else res.hands[r.seat].forEach(function(c){ var mc=document.createElement("div"); mc.className="mini-card"+(RED[c.suit]?" red":""); mc.textContent=cardLabel(c); hs.appendChild(mc); });
+        rc.appendChild(hs); } });
     setStatus(playerName(res.winner)+"\u304c\u4e0a\u304c\u308a\u307e\u3057\u305f\uff08\u5168\u54e1\u304c\u62bc\u3059\u3068\u6b21\u306e\u30e9\u30a6\u30f3\u30c9\u3078\uff09");
     var nb=document.getElementById("btn-next"); if(nb){ nb.disabled=false; nb.textContent="\u6b21\u306e\u30b2\u30fc\u30e0\u3078"; }
     var nsel=document.getElementById("next-status"); if(nsel){ nsel.textContent=""; }
