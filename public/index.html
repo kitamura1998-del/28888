@@ -190,6 +190,34 @@
     grid-column:1 / -1;font-size:20px;font-weight:900;letter-spacing:.05em;text-shadow:0 1px 3px rgba(0,0,0,.45)}
   .suit-opt.rainbow .kana{color:#fff}
 
+  /* ===== "ワンでーす！" announce button (bottom-right) ===== */
+  .one-btn{position:fixed;right:12px;bottom:124px;z-index:60;padding:14px 20px;border-radius:999px;border:2px solid #fff;
+    background:linear-gradient(160deg,#ff6a6a,#d61f1f);color:#fff;font-weight:900;font-size:16px;letter-spacing:.03em;
+    box-shadow:0 8px 20px rgba(214,31,31,.55),0 0 0 4px rgba(255,100,100,.25);cursor:pointer;animation:onePulse 1s ease-in-out infinite}
+  .one-btn:active{transform:scale(.93)}
+  @keyframes onePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+  /* ===== dynamically-placed opponent seats (3-5 players) ===== */
+  .seat.oppo{transform:translate(-50%,-50%)}
+  .seat.oppo .oppo-hand{display:flex;margin-top:7px}
+  .seat.oppo.side-top .oppo-hand{order:-1;margin-top:0;margin-bottom:7px}
+  .seat.oppo.side-left .oppo-hand,.seat.oppo.side-right .oppo-hand{flex-direction:column}
+  .seat.oppo.side-top .cardback:not(:first-child){margin-left:-22px}
+  .seat.oppo.side-left .cardback:not(:first-child),.seat.oppo.side-right .cardback:not(:first-child){margin-top:-34px}
+  .seat.oppo.side-top .bubble{top:calc(100% + 8px);left:50%;transform:translateX(-50%)}
+  .seat.oppo.side-left .bubble{left:calc(100% + 10px);top:46%;transform:translateY(-50%)}
+  .seat.oppo.side-right .bubble{right:calc(100% + 10px);top:46%;transform:translateY(-50%)}
+  .seat.oppo.side-top .bubble-inner::after{top:-11px;left:50%;margin-left:-6px;border-bottom-color:#fff}
+  .seat.oppo.side-left .bubble-inner::after{left:-11px;top:50%;margin-top:-6px;border-right-color:#fff}
+  .seat.oppo.side-right .bubble-inner::after{right:-11px;top:50%;margin-top:-6px;border-left-color:#fff}
+  /* ===== host config (lobby) ===== */
+  .host-config{display:flex;flex-direction:column;gap:11px;margin:4px 0 14px;background:#0e1929;border:1px solid #24344c;border-radius:12px;padding:13px}
+  .cfg-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .cfg-label{font-size:13.5px;color:#cdd9e8;font-weight:700}
+  .cfg-opts{display:flex;gap:6px}
+  .cfg-opt{padding:7px 15px;border-radius:999px;border:1px solid #2c4366;cursor:pointer;font-weight:800;font-size:13px;background:#16233a;color:#9fb9cf;transition:transform .08s}
+  .cfg-opt:active{transform:scale(.93)}
+  .cfg-opt.on{background:linear-gradient(180deg,#ffe7a6,#f0c14b);color:#3a1d00;border-color:#fff3dd}
+  .cfg-readonly{color:#9fb9cf;font-size:13px;margin:2px 0 14px;line-height:1.7;background:#0e1929;border:1px solid #24344c;border-radius:10px;padding:10px 12px}
   /* ===== low-hand warning buttons (bottom-left) ===== */
   .tenpai-btns{position:fixed;left:10px;bottom:120px;z-index:40;display:flex;flex-direction:column;gap:8px}
   .tnp-btn{padding:10px 14px;border-radius:999px;border:1px solid #ffe7a6;font-weight:800;font-size:13px;cursor:pointer;
@@ -596,6 +624,12 @@
       <div id="lobby-room" class="hidden">
         <div class="room-code">部屋コード<b id="room-code"></b></div>
         <div id="seat-list" class="seat-list"></div>
+        <div id="host-config" class="host-config hidden">
+          <div class="cfg-row"><span class="cfg-label">人数</span><div class="cfg-opts" id="cfg-players"></div></div>
+          <div class="cfg-row"><span class="cfg-label">配るカード</span><div class="cfg-opts" id="cfg-deal"></div></div>
+          <div class="cfg-row"><span class="cfg-label">ロン返し</span><div class="cfg-opts" id="cfg-ronret"></div></div>
+        </div>
+        <div id="config-readonly" class="cfg-readonly hidden"></div>
         <button id="btn-startgame" class="start-btn hidden" style="width:100%">ゲーム開始</button>
         <div class="lobby-hint" id="lobby-hint"></div>
       </div>
@@ -605,27 +639,7 @@
 <div id="table" class="hidden">
     <div class="felt"></div>
 
-    <div class="seat" id="seat-top">
-      <div class="avatar">🐶<span class="av-mult hidden"></span></div>
-      <div class="nm">正面</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
-      <div class="oppo-hand"></div>
-      <div class="bubble"><div class="bubble-inner"></div></div>
-    </div>
-    <div class="seat" id="seat-left">
-      <div class="avatar">🐹<span class="av-mult hidden"></span></div>
-      <div class="nm">左</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
-      <div class="oppo-hand"></div>
-      <div class="bubble"><div class="bubble-inner"></div></div>
-    </div>
-    <div class="seat" id="seat-right">
-      <div class="avatar">🐰<span class="av-mult hidden"></span></div>
-      <div class="nm">右</div>
-      <div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>
-      <div class="oppo-hand"></div>
-      <div class="bubble"><div class="bubble-inner"></div></div>
-    </div>
+    <!-- opponent seats are generated dynamically by JS (3-5 players) -->
 
     <div id="center">
       <div class="pile">
@@ -680,7 +694,7 @@
     <div class="overlay hidden" id="ron-overlay">
       <div class="ron-stage">
         <div class="ron-rays"></div>
-        <div class="ron-title">RON&nbsp;CHANCE</div>
+        <div class="ron-title" id="ron-title">RON&nbsp;CHANCE</div>
         <div class="ron-sub" id="ron-sub">手札の合計が場のカードと一致しています。</div>
         <div class="ron-calls" id="ron-calls"></div>
         <button class="ron-pass-btn" id="btn-ron-pass">スルーする</button>
@@ -725,6 +739,9 @@
     <!-- taunt splash (ron calls / warnings) -->
     <div class="taunt-fx hidden" id="taunt-fx"><div class="tf-word" id="tf-word"></div></div>
 
+    <!-- "ワン" announce button (bottom-right) -->
+    <button class="one-btn hidden" id="btn-one">ワンでーす！</button>
+
     <!-- low-hand warning buttons (bottom-left) -->
     <div class="tenpai-btns hidden" id="tenpai-btns">
       <button class="tnp-btn" data-say="気をつけて〜">気をつけて〜</button>
@@ -755,6 +772,9 @@
           <p style="margin:8px 0"><b>点数</b> ── 誰かが上がったら終了。残り3人は手札の数字の合計がマイナス点、上がった人はその合計をプラスでもらう。持ち点は引き継いで次ゲームへ。</p>
           <p style="margin:8px 0"><b>ロン</b> ── 他の人が出したカードの数字と、自分の手札の数字の合計が一致したら、手番に関係なく「ロン」で即勝ち。複数人が同時に該当したら、次の手番が近い人が優先。ロンされた人（その札を出した人）は失点が×2になる。</p>
           <p style="margin:8px 0"><b>引きロン</b> ── 2にそえ札を出されたとき、そのペナルティで引いた札を加えた手札の合計が「そえ札の数字」と一致したら、引いたあとに「引きロン」で即勝ちできる（例：♠1を持っていて、右隣が2＋そえ札13を出し、引いた❤7と❤5を加えて合計13になったら引きロン）。このときボタンは「引きロン」のみ。</p>
+          <p style="margin:8px 0"><b>ワン</b> ── 手札が残り1枚になったら、右下の「ワンでーす！」ボタンを押して全員に知らせる。次の自分の番が来るまでに押さなかったら、ペナルティで山札から2枚引く（ワンペナルティ）。</p>
+          <p style="margin:8px 0"><b>流局</b> ── 山札がなくなったら場の一番上を残してシャッフルし山札に戻すが、山札が2回なくなったらそのゲームは流れて（点数の移動なし）次のゲームへ。次の開始は前回のスタート者から。</p>
+          <p style="margin:8px 0"><b>ロン返し</b> ── ホストが「あり」にした時のみ。自分が出した札でロンされても、その時に自分の手札合計も同じ数で待っていたら「ロン返し」で逆転勝ちできる（例：❤3❤5❤8を持ち❤8を出して合計8待ち→♠8だけの人にロンされても、ロン返しで自分の勝ち）。ロンしてきた相手が負けになり、失点は×4。</p>
           <p style="margin:8px 0"><b>スタート札の倍率</b> ── 最初に表になった場札が 10/J/Q なら負けた人の失点が×2、K なら×3、♠A なら×5。（ロンされた人はさらに×2＝♠Aなら×10）</p>
         </div>
         <button class="start-btn" id="btn-rules-close" style="margin-top:16px;width:100%">とじる</button>
@@ -788,7 +808,7 @@
   var ws=null, myId=null, myName="Player", iCreatedRoom=false;
   var room=null, yourSeat=0;
   var liveState=null;
-  var queue=[], animating=false, waiting=false, pendingRon=false;
+  var queue=[], animating=false, waiting=false, pendingRon=false, pendingRonRet=false;
 
   /* ---------- audio ---------- */
   var AC=null;
@@ -828,10 +848,36 @@
     return el; }
 
   /* ---------- seat mapping (you at bottom) ---------- */
-  function screenPos(seat){ return (seat - yourSeat + 4) % 4; }   // 0 bottom,1 left,2 top,3 right
-  function domSeatByPos(pos){ return document.getElementById(pos===0?"seat-bottom":pos===1?"seat-left":pos===2?"seat-top":"seat-right"); }
+  function playerCount(){ return (liveState&&liveState.players)?liveState.players.length : (room&&room.seats?room.seats.length:4); }
+  function screenPos(seat){ var N=playerCount(); return (seat - yourSeat + N) % N; }   // 0 = you (bottom)
+  var OPP_EMOJI=["\ud83d\udc36","\ud83d\udc39","\ud83d\udc30","\ud83e\udd8a","\ud83d\udc3b"];   // 🐶🐹🐰🦊🐻
+  var LAYOUTS={
+    3:[{l:14,t:40,s:"left"},{l:86,t:40,s:"right"}],
+    4:[{l:11,t:42,s:"left"},{l:50,t:12,s:"top"},{l:89,t:42,s:"right"}],
+    5:[{l:9,t:46,s:"left"},{l:30,t:12,s:"top"},{l:70,t:12,s:"top"},{l:91,t:46,s:"right"}]
+  };
+  var oppoEls={}, builtFor=0;
+  function ensureSeats(N){
+    if(builtFor===N) return;
+    Object.keys(oppoEls).forEach(function(k){ var el=oppoEls[k]; if(el&&el.parentNode) el.parentNode.removeChild(el); });
+    oppoEls={};
+    var table=document.getElementById("table"); var layout=LAYOUTS[N]||LAYOUTS[4];
+    for(var pos=1; pos<N; pos++){
+      var cfg=layout[pos-1]||{l:50,t:12,s:"top"};
+      var el=document.createElement("div");
+      el.className="seat oppo side-"+cfg.s; el.style.left=cfg.l+"%"; el.style.top=cfg.t+"%";
+      el.innerHTML='<div class="avatar">'+OPP_EMOJI[(pos-1)%OPP_EMOJI.length]+'<span class="av-mult hidden"></span></div>'+
+                   '<div class="nm"></div>'+
+                   '<div class="nameplate"><span class="chip"></span><span class="pts"></span><span class="cnt"></span><span class="chipstack"></span></div>'+
+                   '<div class="oppo-hand"></div>'+
+                   '<div class="bubble"><div class="bubble-inner"></div></div>';
+      table.appendChild(el); oppoEls[pos]=el;
+    }
+    builtFor=N;
+  }
+  function domSeatByPos(pos){ if(pos===0) return document.getElementById("seat-bottom"); return oppoEls[pos]||null; }
   function domSeat(seat){ return domSeatByPos(screenPos(seat)); }
-  function playerName(seat){ if(seat===yourSeat) return myName||"\u3042\u306a\u305f"; var s=room&&room.seats[seat]; if(s && !s.isAI && s.name) return s.name; return "\u30d7\u30ec\u30a4\u30e4\u30fc"+(4-screenPos(seat)); }
+  function playerName(seat){ if(seat===yourSeat) return myName||"\u3042\u306a\u305f"; var s=room&&room.seats[seat]; if(s && !s.isAI && s.name) return s.name; return "\u30d7\u30ec\u30a4\u30e4\u30fc"+(playerCount()-screenPos(seat)); }
   function handCount(state,seat){ var p=state.players[seat]; return p.hand?p.hand.length:(p.count||0); }
 
   /* ---------- bubbles & splash ---------- */
@@ -886,6 +932,7 @@
 
   function render(state){
     var s=state||liveState; if(!s) return;
+    var N=playerCount(); ensureSeats(N);
     var dc = s.deck?s.deck.length:(s.deckCount||0);
     document.getElementById("deck-count").textContent=dc;
     var dis=document.getElementById("discard"); dis.innerHTML=""; if(s.discard.length){ dis.appendChild(cardEl(s.discard[s.discard.length-1])); }
@@ -894,9 +941,9 @@
     Array.prototype.forEach.call(document.querySelectorAll(".av-mult"),function(el){ el.className="av-mult tier"+tier+(sm>1?"":" hidden"); if(sm>1) el.textContent=sm+"\u500d"; });
     var activeSeat=(s.phase==="turn")?s.turn:-1;
     var maxScore=-Infinity, leader=-1;
-    for(var t=0;t<4;t++){ if(s.players[t].score>maxScore){ maxScore=s.players[t].score; leader=t; } }
-    for(var seat=0; seat<4; seat++){
-      var pos=screenPos(seat), el=domSeatByPos(pos);
+    for(var t=0;t<N;t++){ if(s.players[t].score>maxScore){ maxScore=s.players[t].score; leader=t; } }
+    for(var seat=0; seat<N; seat++){
+      var pos=screenPos(seat), el=domSeatByPos(pos); if(!el) continue;
       el.querySelector(".nm").textContent=playerName(seat);
       el.querySelector(".cnt").textContent="\u624b "+handCount(s,seat);
       var pts=el.querySelector(".pts"); var sc=s.players[seat].score; pts.textContent=(sc>0?"+":"")+sc; pts.className="pts "+(sc>0?"pos":sc<0?"neg":"");
@@ -925,6 +972,10 @@
     var lowBtns=document.getElementById("tenpai-btns");
     if(lowBtns){ var low=(liveState && liveState.players && liveState.players[yourSeat] && liveState.players[yourSeat].hand && liveState.phase!=="roundover" && liveState.phase!=="idle" && Engine.handSum(liveState.players[yourSeat])<=13);
       lowBtns.classList.toggle("hidden", !low); }
+    var oneBtn=document.getElementById("btn-one");
+    if(oneBtn){ var me=liveState&&liveState.players&&liveState.players[yourSeat];
+      var showOne=!!(me&&me.hand&&me.hand.length===1&&!me.calledOne&&liveState.phase!=="roundover"&&liveState.phase!=="idle");
+      oneBtn.classList.toggle("hidden", !showOne); }
     if(!myTurn()){ pb.disabled=true; db.disabled=true; return; } db.disabled=false;
     var v=Engine.validatePlay(liveState,yourSeat,selectedCards()); pb.disabled=!v.ok;
     if(v.ok&&v.type==="two"){var c=v.twos.length; pb.textContent=v.follow?("2\u00d7"+c+" \uff0b \u305d\u3048\u672d\u3092\u51fa\u3059"):("2\u00d7"+c+"\u3092\u51fa\u3059");}
@@ -954,10 +1005,16 @@
     case "starterIntro": showStarterIntro(ev.mult); break;
     case "tenpo": showTenpo(ev.seat, ev.mult); break;
     case "ron": playRonFanfare(); showTaunt(ev.call||"\u30ed\u30f3"); showBubble(ev.seat,(ev.call||"\u30ed\u30f3")+"\uff01",{gold:true}); break;
-    case "ronGift": flySeatToSeat(ev.from, ev.to, ev.card); playCardSound(); showBubble(ev.from, cardLabel(ev.card)+"\u3092\u9032\u4e0a", {red:RED[ev.card.suit]}); break; } }
+    case "ronGift": flySeatToSeat(ev.from, ev.to, ev.card); playCardSound(); showBubble(ev.from, cardLabel(ev.card)+"\u3092\u9032\u4e0a", {red:RED[ev.card.suit]}); break;
+    case "oneCall": playCardSound(); showBubble(ev.seat, "\u30ef\u30f3\u3067\u30fc\u3059\uff01", {gold:true}); break;
+    case "onePenalty": showBubble(ev.seat, "\u30ef\u30f3\u30da\u30ca\u30eb\u30c6\u30a3\uff01\uff0b2\u679a", {gold:true}); break;
+    case "ronReturnAvailable": setStatus("\u30ed\u30f3\u8fd4\u3057\u306e\u30c1\u30e3\u30f3\u30b9\uff01"); break;
+    case "ronReturn": playRonFanfare(); showTaunt("\u30ed\u30f3\u8fd4\u3057\uff01"); showBubble(ev.seat, "\u30ed\u30f3\u8fd4\u3057\uff01", {gold:true}); break;
+    case "ronReturnPass": break;
+    case "roundVoid": showTaunt("\u6d41\u5c40"); setStatus("\u5c71\u672d\u304c2\u56de\u3064\u304d\u307e\u3057\u305f\u3002\u6d41\u5c40\u3067\u3059\u3002"); break; } }
   function delayFor(ev){ switch(ev.t){ case "place":return 480; case "combo":return 1500; case "penaltyDraw":return 250; case "starter2":return 300; case "twoEffect":return 220;
     case "starterIntro":return 1250; case "tenpo":return 1850; case "rainbow":return 1050;
-    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; default:return 60; } }
+    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; case "oneCall":return 700; case "onePenalty":return 700; case "ronReturnAvailable":return 320; case "ronReturn":return 1650; case "ronReturnPass":return 200; case "roundVoid":return 1500; default:return 60; } }
 
   function enqueue(events, state){ queue.push({events:events, state:state}); if(!animating) drain(); }
   function drain(){
@@ -971,6 +1028,7 @@
     if(s.phase==="turn"){ if(s.turn===yourSeat) setStatus("<b>\u3042\u306a\u305f</b>\u306e\u756a\u3067\u3059"); else setStatus("<b>"+playerName(s.turn)+"</b>\u306e\u756a\u2026"); }
     else if(s.phase==="suit"){ if(s.suitChooser===yourSeat) askSuit(); else setStatus("<b>"+playerName(s.suitChooser)+"</b>\u304c\u30de\u30fc\u30af\u3092\u9078\u629e\u4e2d"); }
     else if(s.phase==="ron"){ if(s.ron.candidate===yourSeat) showRonUI(); else setStatus("\u30ed\u30f3\u53d7\u4ed8\u4e2d\u2026"); }
+    else if(s.phase==="ronReturn"){ if(s.ronRet && s.ronRet.returner===yourSeat) showRonReturnUI(); else setStatus("\u30ed\u30f3\u8fd4\u3057\u53d7\u4ed8\u4e2d\u2026"); }
     else if(s.phase==="roundover"){ showResult(s.result); }
   }
 
@@ -982,6 +1040,8 @@
     rb.onclick=function(){ hide("suit-overlay"); sendAction({type:"chooseSuit",suit:"rainbow"}); }; grid.appendChild(rb);
     show("suit-overlay"); }
   function showRonUI(){ pendingRon=true; playRonFanfare();
+    var rt=document.getElementById("ron-title"); if(rt) rt.innerHTML="RON&nbsp;CHANCE";
+    var pb0=document.getElementById("btn-ron-pass"); if(pb0) pb0.textContent="\u30b9\u30eb\u30fc\u3059\u308b";
     var dt = !!(liveState.ron && liveState.ron.drawTriggered);
     document.getElementById("ron-sub").textContent = dt
       ? ("\u5f15\u3044\u305f\u672d\u3067\u624b\u672d\u5408\u8a08\u304c "+liveState.ron.byRank+" \u306b\uff01 \u300c\u5f15\u304d\u30ed\u30f3\u300d\u304c\u3067\u304d\u307e\u3059")
@@ -991,15 +1051,33 @@
       list.forEach(function(call,idx){ var b=document.createElement("button"); b.className="ron-call-btn"+(idx===0?" ron":"");
         b.textContent=call+(idx===0?"\uff01":""); b.onclick=function(){ ronWith(call); }; box.appendChild(b); }); }
     show("ron-overlay"); }
+  function showRonReturnUI(){ pendingRonRet=true; playRonFanfare();
+    var rt=document.getElementById("ron-title"); if(rt) rt.textContent="\u30ed\u30f3\u8fd4\u3057!!";
+    document.getElementById("ron-sub").textContent="\u3042\u306a\u305f\u3082\u540c\u3058\u6570\u3067\u5f85\u3063\u3066\u3044\u307e\u3057\u305f\uff01 \u30ed\u30f3\u8fd4\u3057\u3067\u9006\u8ee2\u3067\u304d\u307e\u3059\uff08\u76f8\u624b\u306f\u00d74\u306e\u8ca0\u3051\uff09\u3002";
+    var box=document.getElementById("ron-calls"); if(box){ box.innerHTML="";
+      var b=document.createElement("button"); b.className="ron-call-btn ron"; b.textContent="\u30ed\u30f3\u8fd4\u3057\uff01";
+      b.onclick=function(){ if(!pendingRonRet) return; pendingRonRet=false; hide("ron-overlay"); sendAction({type:"ronReturn", call:"\u30ed\u30f3\u8fd4\u3057"}); }; box.appendChild(b); }
+    var pb=document.getElementById("btn-ron-pass"); if(pb) pb.textContent="\u3084\u3081\u308b\uff08\u76f8\u624b\u306e\u52dd\u3061\uff09";
+    show("ron-overlay"); }
   function ronWith(call){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"ron", call:call}); }
   function ronPass(){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"pass"}); }
   function showResult(res){ if(!res) return;
+    if(res.voided){
+      document.getElementById("result-title").textContent="\u6d41\u5c40";
+      document.getElementById("result-sub").textContent="\u5c71\u672d\u304c2\u56de\u3064\u304d\u305f\u306e\u3067\u3001\u3053\u306e\u30b2\u30fc\u30e0\u306f\u6d41\u308c\u307e\u3057\u305f\uff08\u70b9\u6570\u306e\u79fb\u52d5\u306f\u3042\u308a\u307e\u305b\u3093\uff09";
+      document.getElementById("result-rows").innerHTML="";
+      setStatus("\u6d41\u5c40\uff08\u5168\u54e1\u304c\u62bc\u3059\u3068\u6b21\u306e\u30e9\u30a6\u30f3\u30c9\u3078\uff09");
+      var nbV=document.getElementById("btn-next"); if(nbV){ nbV.disabled=false; nbV.textContent="\u6b21\u306e\u30b2\u30fc\u30e0\u3078"; }
+      var nsV=document.getElementById("next-status"); if(nsV){ nsV.textContent=""; }
+      show("result-overlay"); return;
+    }
     document.getElementById("result-title").textContent=(res.winner===yourSeat?"\u3042\u306a\u305f\u306e\u52dd\u3061\uff01":playerName(res.winner)+"\u306e\u52dd\u3061");
     var parts=[]; if(res.starterMult>1) parts.push("\u6700\u521d\u306e\u5834 "+cardLabel(res.starter)+" \u2192 "+res.starterMult+"\u500d"); if(res.tenpoMult>1) parts.push("\u5929\u4fdd \u2192 "+res.tenpoMult+"\u500d"); if(res.comboMult>1) parts.push("2 and 8 \u2192 "+res.comboMult+"\u500d");
     document.getElementById("result-sub").textContent=parts.length?parts.join(" / "):"\u6b8b\u308a\u624b\u672d\u306e\u5408\u8a08\u304c\u6e05\u7b97\u3055\u308c\u307e\u3057\u305f";
     var rc=document.getElementById("result-rows"); rc.innerHTML="";
     res.rows.forEach(function(r){ var div=document.createElement("div"); div.className="rrow"+(r.win?" win":""); var dstr=(r.delta>0?"+":"")+r.delta;
-      var detail=r.win?"\u4e0a\u304c\u308a":("\u624b\u672d "+r.sum+(r.mult>1?("\uff08"+r.mult+"\u500d"+(r.ron?"\u30fb\u30ed\u30f3":"")+"\uff09"):""));
+      var tag=r.ronReturn?"\u30fb\u30ed\u30f3\u8fd4\u3057":(r.ron?"\u30fb\u30ed\u30f3":"");
+      var detail=r.win?"\u4e0a\u304c\u308a":("\u624b\u672d "+r.sum+(r.mult>1?("\uff08"+r.mult+"\u500d"+tag+"\uff09"):""));
       div.innerHTML='<span class="who">'+playerName(r.seat)+' <small>'+detail+'</small></span><span class="delta '+(r.delta>=0?"pos":"neg")+'">'+dstr+'</span>'; rc.appendChild(div);
       if(res.hands && res.hands[r.seat]){ var hs=document.createElement("div"); hs.className="reveal-hand";
         if(res.hands[r.seat].length===0){ var z=document.createElement("span"); z.className="reveal-empty"; z.textContent="\u624b\u672d\u306a\u3057"; hs.appendChild(z); }
@@ -1012,19 +1090,38 @@
 
   /* ---------- lobby ---------- */
   function showLobby(){ show("lobby"); hide("table"); hide("hand-dock"); }
+  function cfgSeg(containerId, opts, current, onPick){
+    var box=document.getElementById(containerId); if(!box) return; box.innerHTML="";
+    opts.forEach(function(o){ var b=document.createElement("div"); b.className="cfg-opt"+(o.val===current?" on":"");
+      b.textContent=o.label; b.onclick=function(){ if(o.val===current) return; onPick(o.val); }; box.appendChild(b); });
+  }
+  function renderConfig(isHost){
+    var cfg=(room&&room.config)||{players:4,deal:5,ronReturn:false};
+    var hc=document.getElementById("host-config"), ro=document.getElementById("config-readonly");
+    if(isHost && !room.started){
+      hc.classList.remove("hidden"); ro.classList.add("hidden");
+      cfgSeg("cfg-players",[{val:3,label:"3\u4eba"},{val:4,label:"4\u4eba"},{val:5,label:"5\u4eba"}],cfg.players,function(v){ send({type:"config",config:{players:v}}); });
+      cfgSeg("cfg-deal",[{val:4,label:"4\u679a"},{val:5,label:"5\u679a"}],cfg.deal,function(v){ send({type:"config",config:{deal:v}}); });
+      cfgSeg("cfg-ronret",[{val:false,label:"\u306a\u3057"},{val:true,label:"\u3042\u308a"}],!!cfg.ronReturn,function(v){ send({type:"config",config:{ronReturn:v}}); });
+    } else {
+      hc.classList.add("hidden"); ro.classList.remove("hidden");
+      ro.textContent="\u4eba\u6570 "+cfg.players+"\u4eba \u30fb \u914d\u308b\u30ab\u30fc\u30c9 "+cfg.deal+"\u679a \u30fb \u30ed\u30f3\u8fd4\u3057 "+(cfg.ronReturn?"\u3042\u308a":"\u306a\u3057");
+    }
+  }
   function renderRoom(){ var lc=document.getElementById("lobby-connect"), lr=document.getElementById("lobby-room");
     if(!room){ lc.classList.remove("hidden"); lr.classList.add("hidden"); return; }
     lc.classList.add("hidden"); lr.classList.remove("hidden");
     document.getElementById("room-code").textContent=room.code;
     var list=document.getElementById("seat-list"); list.innerHTML="";
-    for(var i=0;i<4;i++){ var s=room.seats[i]; var row=document.createElement("div"); row.className="seat-row";
+    for(var i=0;i<room.seats.length;i++){ var s=room.seats[i]; var row=document.createElement("div"); row.className="seat-row";
       var who = s ? (s.isAI?"CPU":s.name) : "\u7a7a\u5e2d";
       var tags=[]; if(s&&s.id===room.hostId) tags.push("\u30db\u30b9\u30c8"); if(i===yourSeat) tags.push("\u3042\u306a\u305f"); if(s&&!s.isAI&&!s.connected) tags.push("\u5207\u65ad");
       row.innerHTML='<span class="sr-seat">'+(i+1)+'</span><span class="sr-name">'+who+'</span><span class="sr-tag">'+tags.join(" / ")+'</span>'; list.appendChild(row); }
     var startBtn=document.getElementById("btn-startgame");
     var isHost = (myId != null && room.hostId === myId) || iCreatedRoom;
+    renderConfig(isHost);
     if(isHost && !room.started){ startBtn.classList.remove("hidden"); } else startBtn.classList.add("hidden");
-    document.getElementById("lobby-hint").textContent = isHost ? "\u4eba\u304c\u63c3\u308f\u306a\u304f\u3066\u3082\u958b\u59cb\u3067\u304d\u307e\u3059\uff08\u7a7a\u5e2d\u306fCPU\uff09\u3002\u30b3\u30fc\u30c9\u3092\u53cb\u9054\u306b\u5171\u6709\uff01" : "\u30db\u30b9\u30c8\u306e\u958b\u59cb\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u2026";
+    document.getElementById("lobby-hint").textContent = isHost ? "\u4eba\u6570\u30fb\u914d\u308b\u30ab\u30fc\u30c9\u30fb\u30ed\u30f3\u8fd4\u3057\u3092\u9078\u3093\u3067\u300c\u30b2\u30fc\u30e0\u958b\u59cb\u300d\u3002\u8db3\u308a\u306a\u3044\u4eba\u6570\u306fCPU\u304c\u5165\u308a\u307e\u3059\u3002\u30b3\u30fc\u30c9\u3092\u53cb\u9054\u306b\u5171\u6709\uff01" : "\u30db\u30b9\u30c8\u306e\u958b\u59cb\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u2026";
   }
 
   /* ---------- websocket ---------- */
@@ -1038,7 +1135,7 @@
     if(m.type==="error"){ document.getElementById("lobby-msg").textContent=m.msg; return; }
     if(m.type==="room"){ room=m.room; yourSeat=m.yourSeat; renderRoom();
       if(!room.started){ showLobby(); } return; }
-    if(m.type==="state"){ room=m.room||room; yourSeat=(m.yourSeat!=null?m.yourSeat:yourSeat); liveState=m.state; queue=[]; animating=false; waiting=false; selected=[];
+    if(m.type==="state"){ room=m.room||room; yourSeat=(m.yourSeat!=null?m.yourSeat:yourSeat); liveState=m.state; queue=[]; animating=false; waiting=false; selected=[]; pendingRon=false; pendingRonRet=false;
       hide("lobby"); document.getElementById("table").classList.remove("hidden"); document.getElementById("hand-dock").classList.remove("hidden");
       hide("result-overlay"); hide("suit-overlay"); hide("ron-overlay"); audioInit();
       render(liveState);
@@ -1060,7 +1157,12 @@
   document.getElementById("btn-play").onclick=humanPlay;
   document.getElementById("btn-draw").onclick=humanDraw;
   document.getElementById("deck").onclick=function(){ humanDraw(); };
-  document.getElementById("btn-ron-pass").onclick=ronPass;
+  document.getElementById("btn-ron-pass").onclick=function(){
+    if(pendingRonRet){ pendingRonRet=false; hide("ron-overlay"); sendAction({type:"ronReturnPass"}); return; }
+    ronPass();
+  };
+  var oneB=document.getElementById("btn-one");
+  if(oneB) oneB.onclick=function(){ audioInit(); send({type:"callOne"}); oneB.classList.add("hidden"); };
   Array.prototype.forEach.call(document.querySelectorAll(".tnp-btn"), function(b){
     b.onclick=function(){ audioInit(); var t=b.getAttribute("data-say"); send({type:"say", text:t}); }; });
   document.getElementById("btn-next").onclick=function(){
