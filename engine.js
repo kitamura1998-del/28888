@@ -129,17 +129,22 @@ var Engine = (function(){
     return -1;
   }
 
+  // scoring value of a hand, in integer tenths: 10/J/Q/K = 10 tenths (=1.0), rank n(<=9) = n tenths (=0.n)
+  function handTenths(p){ var t=0; p.hand.forEach(function(c){ t += (c.rank>=10 ? 10 : c.rank); }); return t; }
+  function scorePoints(p){ var t=handTenths(p); return Math.floor((t + 9) / 10); }   // ceil(tenths/10): round the decimal sum up
+
   function scoreRound(s, winner){
     var n=s.players.length;
     var sM=starterMult(s), cM=s.comboMult||1, tM=s.tenpoMult||1, base=sM*cM*tM;
     var rows=[], pot=0;
     for(var i=0;i<n;i++){
-      if(i===winner){ rows.push({seat:i,sum:0,mult:1,win:true,delta:0}); continue; }
-      var sum=handSum(s.players[i]);
+      if(i===winner){ rows.push({seat:i,sum:0,raw:0,mult:1,win:true,delta:0}); continue; }
+      var pts=scorePoints(s.players[i]);        // rounded-up hand value
+      var raw=handTenths(s.players[i])/10;      // exact decimal sum (for display)
       var extra=(i===s.ronReturnTarget)?4:(i===s.ronTarget)?2:1;   // ロン返しは×4, ロンは×2
-      var mult=base*extra, loss=sum*mult;
+      var mult=base*extra, loss=pts*mult;
       pot+=loss; s.players[i].score-=loss;
-      rows.push({seat:i,sum:sum,mult:mult,ron:extra>1,ronReturn:(i===s.ronReturnTarget),win:false,delta:-loss});
+      rows.push({seat:i,sum:pts,raw:raw,mult:mult,ron:extra>1,ronReturn:(i===s.ronReturnTarget),win:false,delta:-loss});
     }
     s.players[winner].score+=pot;
     rows.forEach(function(r){ if(r.win) r.delta=pot; });
