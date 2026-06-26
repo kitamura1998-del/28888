@@ -228,6 +228,27 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if(m.type === "startClub"){
+      // a "club"/league game: the selected members fill the seats (seat 0 = this device),
+      // carry-over scores are seeded, the rest of the members are played by CPU.
+      if(client.room && rooms[client.room] && rooms[client.room].club){ delete rooms[client.room]; }  // drop previous club room
+      const members = Array.isArray(m.members) ? m.members.slice(0,5) : [];
+      if(members.length < 3){ sendTo(ws, { type:"error", msg:"3〜5人を選んでください" }); return; }
+      const N = members.length;
+      const cfg = { players:N,
+        deal:(m.cfg && (m.cfg.deal===4||m.cfg.deal===5)) ? m.cfg.deal : 5,
+        ronReturn: !!(m.cfg && m.cfg.ronReturn) };
+      const room = newRoom(); rooms[room.code] = room;
+      room.config = cfg; room.club = true; room.seats = [];
+      room.seats[0] = { id:client.id, name:(members[0].name||"P1").slice(0,16), isAI:false, connected:true, ws };
+      for(let i=1;i<N;i++){ room.seats[i] = { id:"ai"+i+"_"+room.code, name:(members[i].name||("P"+(i+1))).slice(0,16), isAI:true, connected:true, ws:null }; }
+      room.hostId = client.id; client.room = room.code; room.started = true;
+      room.state = Engine.newMatch(members.map(mm => (mm.score|0)), cfg);   // carry-over scores
+      broadcastRoom(room);
+      startRound(room, Math.floor(Math.random()*N));
+      return;
+    }
+
     if(m.type === "config"){
       const room = rooms[client.room]; if(!room || room.started) return;
       if(room.hostId !== client.id) return;            // host only
