@@ -56,7 +56,62 @@ function firstEmptySeat(room){ for(let i=0;i<room.seats.length;i++) if(!room.sea
 function seatOfClient(room, id){ for(let i=0;i<room.seats.length;i++) if(room.seats[i] && room.seats[i].id===id) return i; return -1; }
 function roomInfo(room){
   return { code:room.code, hostId:room.hostId, started:room.started, config:room.config,
+    club:room.clubName||null,
     seats: room.seats.map(s => s ? { id:s.id, name:s.name, isAI:!!s.isAI, connected:!!s.connected } : null) };
+}
+
+/* ---------------- clubs (leagues shared across devices) ---------------- */
+const clubs = {};      // name -> { name, rev, members:[{id,name,score}] }
+const clubSubs = {};   // name -> Set<ws> (clients viewing the club lobby)
+function memberId(){ return "m"+(nextId++)+Math.random().toString(36).slice(2,6); }
+function clubGames(name){ return Object.keys(rooms).map(k=>rooms[k]).filter(r => r.clubName===name); }
+function memberBusy(name, mid){ return clubGames(name).some(r => (r.seatMember||[]).indexOf(mid)>=0); }
+function clubInfo(name){
+  const c=clubs[name]; if(!c) return null;
+  const games = clubGames(name).map(r => {
+    const names=(r.seatMember||[]).map(mid=>{ const mm=c.members.find(x=>x.id===mid); return mm?mm.name:null; }).filter(Boolean);
+    return { gameId:r.code, host:r.hostName, count:r.targetCount, started:!!r.started, joined:names.length, players:names };
+  });
+  return { name:c.name, rev:c.rev, members:c.members.map(x=>({id:x.id,name:x.name,score:x.score})), games };
+}
+function broadcastClub(name){
+  const info=clubInfo(name); if(!info) return;
+  const subs=clubSubs[name]; if(subs) subs.forEach(ws => sendTo(ws, { type:"club", club:info }));
+}
+function saveClubScores(room){
+  const c=clubs[room.clubName]; if(!c || !room.state) return;
+  (room.seatMember||[]).forEach((mid,seat)=>{ const mm=c.members.find(x=>x.id===mid); if(mm && room.state.players[seat]) mm.score=room.state.players[seat].score; });
+  c.rev++; broadcastClub(room.clubName);
+}
+// spectators see EVERY hand (deck order stays hidden)
+function spectatorView(s){
+  const c=JSON.parse(JSON.stringify(s));
+  c.players=c.players.map(p=>({score:p.score,count:p.hand.length,hand:p.hand,calledOne:!!p.calledOne}));
+  c.deckCount=s.deck.length; c.deck=undefined;
+  return c;
+}
+function gameLobbyInfo(room){
+  const c=clubs[room.clubName];
+  const players=[];
+  for(let seat=0;seat<room.targetCount;seat++){
+    const mid=room.seatMember? room.seatMember[seat] : null;
+    const s=room.seats[seat];
+    if(s && !s.isAI){ players.push({ seat, name:s.name, connected:!!s.connected }); }
+    else if(mid){ const mm=c&&c.members.find(x=>x.id===mid); players.push({ seat, name:mm?mm.name:"?", connected:false }); }
+  }
+  return { gameId:room.code, count:room.targetCount, started:!!room.started, club:room.clubName, players };
+}
+function sendGameLobby(room){
+  room.seats.forEach((s,seat)=>{ if(s && !s.isAI && s.connected) sendTo(s.ws, { type:"gameLobby", lobby:gameLobbyInfo(room), youSeat:seat }); });
+}
+function startClubGame(room){
+  const c=clubs[room.clubName]; if(!c) return;
+  room.seats.length=room.targetCount;
+  room.started=true;
+  const prev=(room.seatMember||[]).map(mid=>{ const mm=c.members.find(x=>x.id===mid); return mm?(mm.score|0):0; });
+  room.state=Engine.newMatch(prev, room.config);   // carry-over scores
+  startRound(room, Math.floor(Math.random()*room.targetCount));
+  broadcastClub(room.clubName);
 }
 function connectedHumans(room){ return room.seats.filter(s => s && !s.isAI && s.connected); }
 function connectedHumanIds(room){ return connectedHumans(room).map(s => s.id); }
@@ -97,12 +152,20 @@ function broadcastState(room, startSeat){
     if(s && !s.isAI && s.connected)
       sendTo(s.ws, { type:"state", state:Engine.redactFor(room.state, seat), yourSeat:seat, startSeat:(startSeat==null?null:startSeat), room:roomInfo(room) });
   });
+  if(room.spectators && room.spectators.length && room.state){
+    const full = spectatorView(room.state);
+    room.spectators.forEach(sp => sendTo(sp.ws, { type:"state", state:full, yourSeat:-1, spectate:true, startSeat:(startSeat==null?null:startSeat), room:roomInfo(room) }));
+  }
 }
 function broadcastEvents(room, events){
   room.seats.forEach((s, seat) => {
     if(s && !s.isAI && s.connected)
       sendTo(s.ws, { type:"events", events:redactEvents(events, seat), state:Engine.redactFor(room.state, seat) });
   });
+  if(room.spectators && room.spectators.length && room.state){
+    const full = spectatorView(room.state);
+    room.spectators.forEach(sp => sendTo(sp.ws, { type:"events", events:events, state:full, spectate:true }));
+  }
 }
 
 /* ---------------- game flow ---------------- */
@@ -129,6 +192,7 @@ function advance(room){
   }
   const pend = Engine.pending(s);
   if(pend.kind === "roundover"){
+    if(room.clubName) saveClubScores(room);   // overwrite club member scores after each round
     // Wait for EVERY connected human to press "next" before starting the next round.
     room.nextReady = [];
     broadcastNextStatus(room);
@@ -228,24 +292,121 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if(m.type === "startClub"){
-      // a "club"/league game: the selected members fill the seats (seat 0 = this device),
-      // carry-over scores are seeded, the rest of the members are played by CPU.
-      if(client.room && rooms[client.room] && rooms[client.room].club){ delete rooms[client.room]; }  // drop previous club room
-      const members = Array.isArray(m.members) ? m.members.slice(0,5) : [];
-      if(members.length < 3){ sendTo(ws, { type:"error", msg:"3〜5人を選んでください" }); return; }
-      const N = members.length;
-      const cfg = { players:N,
-        deal:(m.cfg && (m.cfg.deal===4||m.cfg.deal===5)) ? m.cfg.deal : 5,
-        ronReturn: !!(m.cfg && m.cfg.ronReturn) };
-      const room = newRoom(); rooms[room.code] = room;
-      room.config = cfg; room.club = true; room.seats = [];
-      room.seats[0] = { id:client.id, name:(members[0].name||"P1").slice(0,16), isAI:false, connected:true, ws };
-      for(let i=1;i<N;i++){ room.seats[i] = { id:"ai"+i+"_"+room.code, name:(members[i].name||("P"+(i+1))).slice(0,16), isAI:true, connected:true, ws:null }; }
-      room.hostId = client.id; client.room = room.code; room.started = true;
-      room.state = Engine.newMatch(members.map(mm => (mm.score|0)), cfg);   // carry-over scores
-      broadcastRoom(room);
-      startRound(room, Math.floor(Math.random()*N));
+    /* ---------------- club (multi-device league) ---------------- */
+    if(m.type === "clubEnter"){
+      const name=(m.name||"").trim().slice(0,24);
+      if(!name){ sendTo(ws,{type:"clubError",msg:"クラブ名を入れてください"}); return; }
+      const backup=m.backup;
+      let c=clubs[name];
+      const sanitize=(arr)=> (Array.isArray(arr)?arr:[]).map(x=>({ id:(x&&x.id)||memberId(), name:String((x&&x.name)||"?").slice(0,12), score:(x&&x.score|0)||0 }));
+      if(!c){
+        c={ name, rev:(backup&&(backup.rev|0))||0, members: backup?sanitize(backup.members):[] };
+        clubs[name]=c;
+      } else if(backup && (backup.rev|0) > c.rev){      // client has newer data (server restarted) -> restore
+        c.members=sanitize(backup.members); c.rev=backup.rev|0;
+      }
+      // leave any previous club subscription
+      if(client.club && client.club!==name && clubSubs[client.club]) clubSubs[client.club].delete(ws);
+      client.club=name;
+      if(!clubSubs[name]) clubSubs[name]=new Set();
+      clubSubs[name].add(ws);
+      sendTo(ws,{type:"club", club:clubInfo(name)});
+      return;
+    }
+    if(m.type === "clubAddMember"){
+      const c=clubs[client.club]; if(!c) return;
+      const nm=(m.name||"").trim().slice(0,12); if(!nm) return;
+      c.members.push({ id:memberId(), name:nm, score:0 }); c.rev++;
+      broadcastClub(client.club); return;
+    }
+    if(m.type === "clubRemoveMember"){
+      const c=clubs[client.club]; if(!c) return;
+      if(memberBusy(client.club, m.memberId)){ sendTo(ws,{type:"clubError",msg:"プレイ中の人は消せません"}); return; }
+      c.members=c.members.filter(x=>x.id!==m.memberId); c.rev++;
+      broadcastClub(client.club); return;
+    }
+    if(m.type === "clubResetScores"){
+      const c=clubs[client.club]; if(!c) return;
+      c.members.forEach(x=>x.score=0); c.rev++; broadcastClub(client.club); return;
+    }
+    if(m.type === "clubDelete"){
+      const name=client.club; const c=clubs[name]; if(!c) return;
+      clubGames(name).forEach(r => { if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer); delete rooms[r.code]; });
+      const subs=clubSubs[name];
+      delete clubs[name]; delete clubSubs[name];
+      if(subs) subs.forEach(w => sendTo(w, { type:"clubDeleted", name }));   // kick everyone back to the entry screen
+      return;
+    }
+    if(m.type === "clubLeave"){
+      if(client.club && clubSubs[client.club]) clubSubs[client.club].delete(ws);
+      client.club=null; return;
+    }
+    if(m.type === "clubCreateGame"){
+      const c=clubs[client.club]; if(!c){ sendTo(ws,{type:"clubError",msg:"クラブに入っていません"}); return; }
+      const mem=c.members.find(x=>x.id===m.memberId);
+      if(!mem){ sendTo(ws,{type:"clubError",msg:"自分の名前を選んでください"}); return; }
+      if(memberBusy(client.club, m.memberId)){ sendTo(ws,{type:"clubError",msg:"その人は別のゲームに参加中です"}); return; }
+      const count=Math.max(3,Math.min(5, (m.players|0)||4));
+      const room=newRoom(); rooms[room.code]=room;
+      room.clubName=client.club; room.targetCount=count;
+      room.config={ players:count, deal:(m.deal===4||m.deal===5)?m.deal:5, ronReturn:!!m.ronReturn };
+      room.seats=new Array(count).fill(null);
+      room.seatMember=new Array(count).fill(null);
+      room.spectators=[];
+      room.hostId=client.id; room.hostName=mem.name;
+      room.seats[0]={ id:client.id, name:mem.name, isAI:false, connected:true, ws };
+      room.seatMember[0]=m.memberId; client.room=room.code;
+      sendGameLobby(room); broadcastClub(client.club);
+      return;
+    }
+    if(m.type === "clubJoinGame"){
+      const room=rooms[m.gameId]; const c=clubs[client.club];
+      if(!room || !c || room.clubName!==client.club){ sendTo(ws,{type:"clubError",msg:"そのゲームが見つかりません"}); return; }
+      if(room.started){ sendTo(ws,{type:"clubError",msg:"もう始まっています（観戦できます）"}); return; }
+      const mem=c.members.find(x=>x.id===m.memberId);
+      if(!mem){ sendTo(ws,{type:"clubError",msg:"自分の名前を選んでください"}); return; }
+      if((room.seatMember||[]).indexOf(m.memberId)>=0){ sendTo(ws,{type:"clubError",msg:"その人はもう参加しています"}); return; }
+      if(memberBusy(client.club, m.memberId)){ sendTo(ws,{type:"clubError",msg:"その人は別のゲームに参加中です"}); return; }
+      const seat=firstEmptySeat(room); if(seat<0 || seat>=room.targetCount){ sendTo(ws,{type:"clubError",msg:"満員です"}); return; }
+      room.seats[seat]={ id:client.id, name:mem.name, isAI:false, connected:true, ws };
+      room.seatMember[seat]=m.memberId; client.room=room.code;
+      sendGameLobby(room); broadcastClub(client.club);
+      const joined=room.seats.filter(s=>s&&!s.isAI&&s.connected).length;
+      if(joined>=room.targetCount) startClubGame(room);    // everyone here -> go
+      return;
+    }
+    if(m.type === "clubSpectate"){
+      const room=rooms[m.gameId];
+      if(!room || room.clubName!==client.club){ sendTo(ws,{type:"clubError",msg:"見つかりません"}); return; }
+      if(!room.spectators) room.spectators=[];
+      if(!room.spectators.some(sp=>sp.id===client.id)) room.spectators.push({ id:client.id, ws });
+      client.spectating=room.code;
+      sendTo(ws,{ type:"state", state: room.state?spectatorView(room.state):null, yourSeat:-1, spectate:true, room:roomInfo(room) });
+      return;
+    }
+    if(m.type === "clubLeaveGame"){
+      if(client.spectating){ const r=rooms[client.spectating]; if(r&&r.spectators) r.spectators=r.spectators.filter(sp=>sp.id!==client.id); client.spectating=null; }
+      if(client.room){ const r=rooms[client.room];
+        if(r){ const seat=seatOfClient(r,client.id);
+          if(seat>=0){
+            if(!r.started){ r.seats[seat]=null; if(r.seatMember) r.seatMember[seat]=null;
+              if(r.clubName && r.seats.filter(x=>x&&!x.isAI&&x.connected).length===0){ delete rooms[r.code]; broadcastClub(r.clubName); }
+              else { sendGameLobby(r); broadcastClub(r.clubName); } }
+            else {   // started game: hand the seat to AI, keep the others playing
+              r.seats[seat].connected=false;
+              if(connectedHumans(r).length===0){
+                if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer);
+                if(r.clubName) saveClubScores(r);
+                delete rooms[r.code];
+              } else if(Engine.pending(r.state).kind==="roundover"){ broadcastNextStatus(r); maybeStartNext(r); }
+              else advance(r);
+              if(r.clubName) broadcastClub(r.clubName);
+            }
+          }
+        }
+        client.room=null;
+      }
+      if(client.club) sendTo(ws,{ type:"club", club:clubInfo(client.club) });
       return;
     }
 
@@ -303,22 +464,29 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    // leave club lobby subscription
+    if(client.club && clubSubs[client.club]) clubSubs[client.club].delete(ws);
+    // leave spectating
+    if(client.spectating){ const sr=rooms[client.spectating]; if(sr&&sr.spectators) sr.spectators=sr.spectators.filter(sp=>sp.id!==client.id); client.spectating=null; }
     const room = rooms[client.room]; if(!room) return;
     const seat = seatOfClient(room, client.id);
     if(seat < 0) return;
     if(!room.started){
       room.seats[seat] = null;                       // free the seat in lobby
+      if(room.seatMember) room.seatMember[seat]=null;
       if(room.hostId === client.id){ const h = room.seats.find(x=>x&&!x.isAI); room.hostId = h?h.id:null; }
-      if(connectedHumans(room).length === 0){ delete rooms[room.code]; }
-      else broadcastRoom(room);
+      if(connectedHumans(room).length === 0){ delete rooms[room.code]; if(room.clubName) broadcastClub(room.clubName); }
+      else { if(room.clubName){ sendGameLobby(room); broadcastClub(room.clubName); } else broadcastRoom(room); }
     } else {
       room.seats[seat].connected = false;            // hand over to AI mid-game
       if(connectedHumans(room).length === 0){
         if(room.timer) clearTimeout(room.timer);
         if(room.nextTimer) clearTimeout(room.nextTimer);
+        if(room.clubName) saveClubScores(room);      // keep the latest league scores before dropping the room
         delete rooms[room.code];
+        if(room.clubName) broadcastClub(room.clubName);
       } else {
-        broadcastRoom(room);
+        if(room.clubName) broadcastClub(room.clubName); else broadcastRoom(room);
         if(Engine.pending(room.state).kind === "roundover"){
           broadcastNextStatus(room);   // a leaver no longer needs to press "next"
           maybeStartNext(room);
