@@ -46,7 +46,7 @@ var Engine = (function(){
     s.discard=[starter]; s.suit=starter.suit; s.rank=starter.rank; s.starter=starter;
     s.comboMult=1; s.tenpoMult=1; s.ronTarget=null; s.ronReturnTarget=null; s.suitChooser=null;
     s.ron=null; s.ronRet=null; s.result=null; s.rainbow=false;
-    s.deckRecycles=0; s.voidPending=false; s.roundStart=startSeat;
+    s.deckRecycles=0; s.voidPending=false; s.roundStart=startSeat; s.deckLastDone=false; s._enteredLastDeck=false;
     s.starterPenalty = (starter.rank===2);   // starter is a 2 -> first player who must draw eats 2
     s.turn=startSeat; s.phase="turn";
     var events=[];
@@ -68,8 +68,9 @@ var Engine = (function(){
     if(s.deck.length===0){
       if(s.discard.length<=1) return null;             // truly nothing left
       s.deckRecycles=(s.deckRecycles||0)+1;
-      if(s.deckRecycles>=2){ s.voidPending=true; return null; }   // deck ran out a 2nd time -> 流局
+      if(s.deckRecycles>=3){ s.voidPending=true; return null; }   // deck ran out a 3rd time -> 流局
       var keep=s.discard.pop(); s.deck=shuffle(s.discard); s.discard=[keep];
+      if(s.deckRecycles===2) s._enteredLastDeck=true;             // now on the final (3rd) deck
     }
     return s.deck.pop();
   }
@@ -77,6 +78,7 @@ var Engine = (function(){
     var added=0;
     for(var k=0;k<n;k++){ var c=drawCard(s); if(!c) break; s.players[seat].hand.push(c); events.push({t:"draw",seat:seat,card:c}); added++; }
     if(added>0) s.players[seat].calledOne=false;   // hand grew -> must call again if back to 1
+    if(s._enteredLastDeck && !s.deckLastDone){ s.deckLastDone=true; s._enteredLastDeck=false; events.push({t:"deckLast"}); }  // warn everyone
   }
   function setField(s,c,seat,events){ s.discard.push(c); s.suit=c.suit; s.rank=c.rank; events.push({t:"place",seat:seat,card:c}); }
 
