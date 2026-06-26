@@ -557,19 +557,25 @@
   .suit-opt.dark{color:#e7ebf7}
   .suit-opt:hover{border-color:var(--brass)}
 
-  /* result */
-  .result-rows{display:flex;flex-direction:column;gap:8px;margin:14px 0 18px;text-align:left}
-  .reveal-hand{display:flex;flex-wrap:wrap;gap:3px;margin:-3px 0 6px 2px}
-  .mini-card{min-width:24px;height:30px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;gap:2px;
+  /* result — fit a single screen: title/sub/button fixed, rows take the remaining space */
+  #result-overlay .card-modal{display:flex;flex-direction:column;max-height:100%;padding:18px 18px 16px}
+  #result-overlay h2{margin:0 0 3px;font-size:20px}
+  #result-overlay #result-sub{margin:0 0 8px;font-size:13px}
+  #result-overlay #btn-next{flex:0 0 auto;margin-top:4px}
+  #result-overlay #next-status{flex:0 0 auto;margin-top:8px !important;font-size:13px}
+  .result-rows{display:flex;flex-direction:column;gap:6px;margin:6px 0 10px;text-align:left;
+    flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .reveal-hand{display:flex;flex-wrap:wrap;gap:3px;margin:-1px 0 4px 2px}
+  .mini-card{min-width:20px;height:25px;padding:0 3px;display:inline-flex;align-items:center;justify-content:center;gap:2px;
     background:linear-gradient(160deg,#ffffff,#efe7d4);color:#1a1a1a;border-radius:4px;font-family:Georgia,"Times New Roman",serif;
     box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 0 0 1px rgba(0,0,0,.08)}
-  .mini-card .mc-r{font-size:13px;font-weight:700;line-height:1}
-  .mini-card .mc-s{width:11px;height:12px}
+  .mini-card .mc-r{font-size:11.5px;font-weight:700;line-height:1}
+  .mini-card .mc-s{width:9px;height:10px}
   .mini-card.red{color:#c0392b}
   .reveal-empty{font-size:11.5px;color:var(--muted);opacity:.85;align-self:center}
   .fly-gift{position:fixed;z-index:75;pointer-events:none;will-change:transform,opacity}
   .rrow{display:flex;justify-content:space-between;align-items:center;
-    background:var(--panel);border:1px solid var(--panel-line);border-radius:10px;padding:9px 14px;font-size:14px}
+    background:var(--panel);border:1px solid var(--panel-line);border-radius:10px;padding:7px 12px;font-size:13.5px}
   .rrow .who{font-weight:700;min-width:0;flex:1}
   .rrow .who small{color:var(--muted);font-weight:400;margin-left:6px}
   .rrow .rdelta{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15;flex:0 0 auto;margin-left:10px}
@@ -1124,6 +1130,9 @@
   function ronWith(call){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"ron", call:call}); }
   function ronPass(){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"pass"}); }
   function showResult(res){ if(!res) return;
+    var dock=document.getElementById("hand-dock"); if(dock) dock.classList.add("hidden");   // result screen only: hide your hand
+    var lb=document.getElementById("tenpai-btns"); if(lb) lb.classList.add("hidden");
+    var ob=document.getElementById("btn-one"); if(ob) ob.classList.add("hidden");
     if(res.voided){
       document.getElementById("result-title").textContent="\u6d41\u5c40";
       document.getElementById("result-sub").textContent="\u5c71\u672d\u304c2\u56de\u3064\u304d\u305f\u306e\u3067\u3001\u3053\u306e\u30b2\u30fc\u30e0\u306f\u6d41\u308c\u307e\u3057\u305f\uff08\u70b9\u6570\u306e\u79fb\u52d5\u306f\u3042\u308a\u307e\u305b\u3093\uff09";
@@ -1139,7 +1148,8 @@
     var rc=document.getElementById("result-rows"); rc.innerHTML="";
     res.rows.forEach(function(r){ var div=document.createElement("div"); div.className="rrow"+(r.win?" win":""); var dstr=(r.delta>0?"+":"")+r.delta;
       var tag=r.ronReturn?"\u30fb\u30ed\u30f3\u8fd4\u3057":(r.ron?"\u30fb\u30ed\u30f3":"");
-      var detail=r.win?"\u4e0a\u304c\u308a":("\u624b\u672d "+r.sum+(r.mult>1?("\uff08"+r.mult+"\u500d"+tag+"\uff09"):""));
+      var pre=(r.raw!=null && r.raw!==r.sum)?(r.raw+"\u2192"):"";   // show the decimal sum -> rounded up
+      var detail=r.win?"\u4e0a\u304c\u308a":(pre+r.sum+"\u70b9"+(r.mult>1?("\uff08"+r.mult+"\u500d"+tag+"\uff09"):""));
       var tot=(liveState&&liveState.players&&liveState.players[r.seat])?liveState.players[r.seat].score:null;
       var totStr=(tot==null)?"":("\u7dcf\u5f97\u70b9 "+(tot>0?"+":"")+tot);
       div.innerHTML='<span class="who">'+playerName(r.seat)+' <small>'+detail+'</small></span>'+
