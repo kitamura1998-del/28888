@@ -355,6 +355,9 @@
   .deck-stack .cardback{position:absolute;width:62px;height:88px}
   .deck-stack .cardback:nth-child(1){left:3px;top:3px;opacity:.6}
   .deck-stack .cardback:nth-child(2){left:1.5px;top:1.5px;opacity:.8}
+  .deck-left{font-size:11px;color:#9fb9cf;margin-top:2px;text-align:center;letter-spacing:.02em}
+  .deck-left.last{color:#ffd24a;font-weight:800;animation:deckLastPulse 1s ease-in-out infinite}
+  @keyframes deckLastPulse{0%,100%{opacity:1}50%{opacity:.45}}
   .deck-count{
     position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);
     background:#0d1020;border:1px solid var(--panel-line);border-radius:999px;
@@ -628,10 +631,11 @@
   }
 </style>
 <style>
-  .lobby{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(900px 700px at 50% 35%, #1ba884 0%, #0c5b46 70%, #073d2f 100%);padding:18px}
+  .lobby{position:fixed;inset:0;z-index:70;display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    background:radial-gradient(900px 700px at 50% 35%, #1ba884 0%, #0c5b46 70%, #073d2f 100%);
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
   .lobby-card{background:linear-gradient(180deg,#17283f,#101c2e);border:1px solid rgba(255,255,255,.12);border-radius:18px;
-    padding:24px 22px;width:100%;max-width:360px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+    padding:22px 20px;width:100%;max-width:360px;margin:0 auto;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
   .lobby .brand .nums{font-size:62px;font-weight:800;color:#fff;line-height:1}
   .lobby .brand .nums b{color:#f0c14b}.lobby .brand .nums .amp{color:#f0c14b;font-weight:400;font-size:.6em;margin:0 .1em}
   .lobby .brand .sub{color:#bfe6d4;letter-spacing:.4em;font-size:12px;margin:6px 0 18px;padding-left:.4em}
@@ -651,7 +655,7 @@
   .club-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .club-back{background:transparent;border:none;color:#bfe6d4;font:inherit;font-size:14px;cursor:pointer;padding:4px 0}
   .club-title{font-size:18px;font-weight:800;color:#fff;flex:1;text-align:center;margin-right:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #club-listing{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-height:46vh;overflow:auto}
+  #club-listing{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
   .club-item{display:flex;align-items:center;gap:10px;background:#0e1929;border:1px solid #24344c;border-radius:10px;padding:12px;cursor:pointer}
   .club-item .ci-name{flex:1;text-align:left;font-weight:700;font-size:15px}
   .club-item .ci-sub{color:#9fb9cf;font-size:12px}
@@ -660,7 +664,7 @@
   .club-new input,.club-add input{flex:1;margin:0}
   .club-new .start-btn,.club-add .ghost-btn{white-space:nowrap;padding:12px 16px;font-size:14px}
   .club-sec-label{font-size:12px;color:#9fb9cf;letter-spacing:.04em;margin-bottom:8px}
-  #club-members{display:flex;flex-direction:column;gap:7px;max-height:38vh;overflow:auto;margin-bottom:6px}
+  #club-members{display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
   .cm-row{display:flex;align-items:center;gap:10px;background:#0e1929;border:1px solid #24344c;border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .12s,background .12s}
   .cm-row.sel{border-color:#f0c14b;background:#1b2942}
   .cm-check{width:22px;height:22px;border-radius:6px;border:1.5px solid #44597a;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:14px;color:#241704}
@@ -802,6 +806,7 @@
           <div class="deck-count" id="deck-count">0</div>
         </div>
         <div class="label">山札</div>
+        <div class="deck-left" id="deck-left"></div>
       </div>
       <div class="pile">
         <div class="discard-slot" id="discard"></div>
@@ -1104,6 +1109,9 @@
     var N=playerCount(); ensureSeats(N);
     var dc = s.deck?s.deck.length:(s.deckCount||0);
     document.getElementById("deck-count").textContent=dc;
+    var left=Math.max(0, 3-(s.deckRecycles||0));   // deck-outs remaining before 流局 (void on 3rd)
+    var dl=document.getElementById("deck-left");
+    if(dl){ if(left<=1){ dl.textContent="山札ラスト！"; dl.className="deck-left last"; } else { dl.textContent="残り"+left+"回"; dl.className="deck-left"; } }
     var dis=document.getElementById("discard"); dis.innerHTML=""; if(s.discard.length){ dis.appendChild(cardEl(s.discard[s.discard.length-1])); }
     var chip=document.getElementById("suit-chip");
     if(s.rainbow){ chip.innerHTML="\ud83c\udf08"; chip.className="suit-chip rainbow-chip"; }
@@ -1191,10 +1199,11 @@
     case "ronReturnAvailable": setStatus("\u30ed\u30f3\u8fd4\u3057\u306e\u30c1\u30e3\u30f3\u30b9\uff01"); break;
     case "ronReturn": playRonFanfare(); showTaunt("\u30ed\u30f3\u8fd4\u3057\uff01"); showBubble(ev.seat, "\u30ed\u30f3\u8fd4\u3057\uff01", {gold:true}); break;
     case "ronReturnPass": break;
-    case "roundVoid": showTaunt("\u6d41\u5c40"); setStatus("\u5c71\u672d\u304c2\u56de\u3064\u304d\u307e\u3057\u305f\u3002\u6d41\u5c40\u3067\u3059\u3002"); break; } }
+    case "deckLast": showTaunt("\u5c71\u672d\u30e9\u30b9\u30c8\uff01"); setStatus("\u6700\u5f8c\u306e\u5c71\u672d\u3067\u3059\uff01\u6b21\u306b\u5c71\u672d\u304c\u3064\u304d\u308b\u3068\u6d41\u5c40\u3067\u3059\u3002"); break;
+    case "roundVoid": showTaunt("\u6d41\u5c40"); setStatus("\u5c71\u672d\u304c3\u56de\u3064\u304d\u307e\u3057\u305f\u3002\u6d41\u5c40\u3067\u3059\u3002"); break; } }
   function delayFor(ev){ switch(ev.t){ case "place":return 480; case "combo":return 1500; case "penaltyDraw":return 250; case "starter2":return 300; case "twoEffect":return 220;
     case "starterIntro":return 1250; case "tenpo":return 1850; case "rainbow":return 1050;
-    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; case "oneCall":return 700; case "onePenalty":return 700; case "ronReturnAvailable":return 320; case "ronReturn":return 1650; case "ronReturnPass":return 200; case "roundVoid":return 1500; default:return 60; } }
+    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; case "oneCall":return 700; case "onePenalty":return 700; case "ronReturnAvailable":return 320; case "ronReturn":return 1650; case "ronReturnPass":return 200; case "roundVoid":return 1500; case "deckLast":return 1300; default:return 60; } }
 
   function enqueue(events, state){ queue.push({events:events, state:state}); if(!animating) drain(); }
   function drain(){
