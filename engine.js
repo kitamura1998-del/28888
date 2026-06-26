@@ -183,6 +183,13 @@ var Engine = (function(){
       // everyone just drew their 2-penalty cards above, so any RON found here is a "引きロン" (drawn into it)
       if(!checkRonOr(s, placer, follow.rank, ctxF, events, true)) contTwoFollow(s, placer, follow, count, events);
     } else {
+      // 2 with no follow: if the placer just played their LAST card(s) and went out,
+      // they WIN — no 1-card no-follow penalty. (Others already drew their 2-penalty above.)
+      if(s.players[placer].hand.length===0){
+        scoreRound(s, placer);
+        events.push({t:"roundOver"});
+        return;
+      }
       events.push({t:"penaltyDraw", seat:placer});
       give(s, placer, 1, events);
       contTwoNoFollow(s, placer, count, events);
@@ -263,7 +270,6 @@ var Engine = (function(){
     }
     if(action.type==="draw"){
       if(s.phase!=="turn") return {error:"not your turn"};
-      s.rainbow=false;
       var pen = s.starterPenalty; s.starterPenalty=false;
       if(pen){ events.push({t:"starter2", seat:s.turn}); give(s, s.turn, 2, events); }
       else { events.push({t:"turnDraw", seat:s.turn}); give(s, s.turn, 1, events); }
