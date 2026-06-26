@@ -646,6 +646,29 @@
   .sr-seat{width:22px;height:22px;border-radius:50%;background:#f0c14b;color:#241704;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto}
   .sr-name{flex:1;text-align:left;font-weight:700}.sr-tag{color:#bfe6d4;font-size:12px}
   .lobby-hint{color:#9fb9cf;font-size:12px;margin-top:8px;line-height:1.6}
+  /* club / league */
+  .club-entry{margin-top:14px}
+  .club-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .club-back{background:transparent;border:none;color:#bfe6d4;font:inherit;font-size:14px;cursor:pointer;padding:4px 0}
+  .club-title{font-size:18px;font-weight:800;color:#fff;flex:1;text-align:center;margin-right:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #club-listing{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-height:46vh;overflow:auto}
+  .club-item{display:flex;align-items:center;gap:10px;background:#0e1929;border:1px solid #24344c;border-radius:10px;padding:12px;cursor:pointer}
+  .club-item .ci-name{flex:1;text-align:left;font-weight:700;font-size:15px}
+  .club-item .ci-sub{color:#9fb9cf;font-size:12px}
+  .club-item .ci-del{background:transparent;border:none;color:#ff7b6e;font-size:18px;cursor:pointer;padding:2px 6px}
+  .club-new,.club-add{display:flex;gap:8px;margin-top:4px}
+  .club-new input,.club-add input{flex:1;margin:0}
+  .club-new .start-btn,.club-add .ghost-btn{white-space:nowrap;padding:12px 16px;font-size:14px}
+  .club-sec-label{font-size:12px;color:#9fb9cf;letter-spacing:.04em;margin-bottom:8px}
+  #club-members{display:flex;flex-direction:column;gap:7px;max-height:38vh;overflow:auto;margin-bottom:6px}
+  .cm-row{display:flex;align-items:center;gap:10px;background:#0e1929;border:1px solid #24344c;border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .12s,background .12s}
+  .cm-row.sel{border-color:#f0c14b;background:#1b2942}
+  .cm-check{width:22px;height:22px;border-radius:6px;border:1.5px solid #44597a;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:14px;color:#241704}
+  .cm-row.sel .cm-check{background:#f0c14b;border-color:#f0c14b}
+  .cm-name{flex:1;text-align:left;font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cm-score{font-variant-numeric:tabular-nums;font-weight:800;font-size:15px}
+  .cm-score.pos{color:#7be0a3}.cm-score.neg{color:#ff7b6e}.cm-score.zero{color:#cdd9e8}
+  .cm-del{background:transparent;border:none;color:#ff7b6e;font-size:17px;cursor:pointer;padding:2px 4px}
 </style>
 </head>
 <body>
@@ -661,6 +684,26 @@
           <button id="btn-join" class="ghost-btn">参加</button>
         </div>
         <div id="lobby-msg" class="lobby-msg"></div>
+        <div class="club-entry"><button id="btn-club" class="ghost-btn" style="width:100%">クラブ（点数を記録して遊ぶ）</button></div>
+      </div>
+      <div id="club-list" class="hidden">
+        <div class="club-head"><button class="club-back" id="club-list-back">‹ もどる</button><span class="club-title">クラブ</span></div>
+        <div id="club-listing"></div>
+        <div class="club-new"><input id="club-new-name" placeholder="新しいクラブ名（例：サッカー部）" maxlength="20" /><button id="btn-club-create" class="start-btn">作成</button></div>
+        <div class="lobby-hint">クラブは複数作れて、それぞれ点数が別々に保存されます（この端末に保存）。パスワードは不要です。</div>
+      </div>
+      <div id="club-room" class="hidden">
+        <div class="club-head"><button class="club-back" id="club-room-back">‹ クラブ一覧</button><span class="club-title" id="club-room-name"></span></div>
+        <div class="club-sec-label">メンバーと持ち点（タップで今回の参加者を選ぶ）</div>
+        <div id="club-members"></div>
+        <div class="club-add"><input id="club-add-name" placeholder="メンバーを追加（名前）" maxlength="12" /><button id="btn-member-add" class="ghost-btn">追加</button></div>
+        <div class="host-config" style="margin-top:12px">
+          <div class="cfg-row"><span class="cfg-label">配るカード</span><div class="cfg-opts" id="club-cfg-deal"></div></div>
+          <div class="cfg-row"><span class="cfg-label">ロン返し</span><div class="cfg-opts" id="club-cfg-ronret"></div></div>
+        </div>
+        <div id="club-select-hint" class="lobby-hint"></div>
+        <button id="btn-club-start" class="start-btn" style="width:100%;margin-top:6px">選んだメンバーでゲーム開始</button>
+        <button id="btn-club-reset" class="ghost-btn" style="width:100%;margin-top:8px">点数をリセット</button>
       </div>
       <div id="lobby-room" class="hidden">
         <div class="room-code">部屋コード<b id="room-code"></b></div>
@@ -796,6 +839,7 @@
         <p id="result-sub"></p>
         <div class="result-rows" id="result-rows"></div>
         <button class="start-btn" id="btn-next">次のゲームへ</button>
+        <button class="ghost-btn hidden" id="btn-club-back" style="width:100%;margin-top:8px">クラブに戻る（点数を保存）</button>
         <p id="next-status" style="margin-top:10px;color:#cfe3d0;font-size:14px;min-height:18px"></p>
       </div>
     </div>
@@ -934,7 +978,7 @@
   }
   function domSeatByPos(pos){ if(pos===0) return document.getElementById("seat-bottom"); return oppoEls[pos]||null; }
   function domSeat(seat){ return domSeatByPos(screenPos(seat)); }
-  function playerName(seat){ if(seat===yourSeat) return myName||"\u3042\u306a\u305f"; var s=room&&room.seats[seat]; if(s && !s.isAI && s.name) return s.name; return "\u30d7\u30ec\u30a4\u30e4\u30fc"+(playerCount()-screenPos(seat)); }
+  function playerName(seat){ if(seat===yourSeat) return myName||"\u3042\u306a\u305f"; var s=room&&room.seats[seat]; if(s && s.name && s.name!=="CPU") return s.name; return "\u30d7\u30ec\u30a4\u30e4\u30fc"+(playerCount()-screenPos(seat)); }
   function handCount(state,seat){ var p=state.players[seat]; return p.hand?p.hand.length:(p.count||0); }
 
   /* ---------- bubbles & splash ---------- */
@@ -1133,6 +1177,8 @@
     var dock=document.getElementById("hand-dock"); if(dock) dock.classList.add("hidden");   // result screen only: hide your hand
     var lb=document.getElementById("tenpai-btns"); if(lb) lb.classList.add("hidden");
     var ob=document.getElementById("btn-one"); if(ob) ob.classList.add("hidden");
+    if(CLUB_GAME){ recordClubScores(); }
+    var cbk=document.getElementById("btn-club-back"); if(cbk) cbk.classList.toggle("hidden", !CLUB_GAME);
     if(res.voided){
       document.getElementById("result-title").textContent="\u6d41\u5c40";
       document.getElementById("result-sub").textContent="\u5c71\u672d\u304c2\u56de\u3064\u304d\u305f\u306e\u3067\u3001\u3053\u306e\u30b2\u30fc\u30e0\u306f\u6d41\u308c\u307e\u3057\u305f\uff08\u70b9\u6570\u306e\u79fb\u52d5\u306f\u3042\u308a\u307e\u305b\u3093\uff09";
@@ -1209,7 +1255,9 @@
   function onMessage(m){
     if(m.type==="hello"){ myId=m.you.id; return; }
     if(m.type==="error"){ document.getElementById("lobby-msg").textContent=m.msg; return; }
-    if(m.type==="room"){ room=m.room; yourSeat=m.yourSeat; renderRoom();
+    if(m.type==="room"){ room=m.room; yourSeat=m.yourSeat;
+      if(CLUB_GAME) return;   // club game: skip the lobby room, go straight to the table on the next state
+      renderRoom();
       if(!room.started){ showLobby(); } return; }
     if(m.type==="state"){ room=m.room||room; yourSeat=(m.yourSeat!=null?m.yourSeat:yourSeat); liveState=m.state; queue=[]; animating=false; waiting=false; selected=[]; pendingRon=false; pendingRonRet=false;
       hide("lobby"); document.getElementById("table").classList.remove("hidden"); document.getElementById("hand-dock").classList.remove("hidden");
@@ -1222,6 +1270,84 @@
     if(m.type==="nextStatus"){ var ns=document.getElementById("next-status");
       if(ns){ ns.textContent = m.ready+" / "+m.total+" \u4eba\u304c\u300c\u6b21\u306e\u30b2\u30fc\u30e0\u3078\u300d\u3092\u62bc\u3057\u307e\u3057\u305f"; }
       return; }
+  }
+
+  /* ---------- club / league (saved on this device) ---------- */
+  var CLUB_KEY="nippachi_clubs_v1";
+  var CLUBS={}, curClubId=null, clubSel={}, CLUB_GAME=null;
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch];}); }
+  function loadClubs(){ try{ var s=localStorage.getItem(CLUB_KEY); CLUBS=s?JSON.parse(s):{}; }catch(e){ CLUBS={}; } if(!CLUBS||typeof CLUBS!=="object") CLUBS={}; }
+  function saveClubs(){ try{ localStorage.setItem(CLUB_KEY, JSON.stringify(CLUBS)); }catch(e){} }
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+  function hideLobbySections(){ ["lobby-connect","club-list","club-room","lobby-room"].forEach(hide); }
+  function showConnect(){ hideLobbySections(); show("lobby-connect"); }
+  function showClubList(){ loadClubs(); hideLobbySections(); renderClubList(); show("club-list"); }
+  function showClubRoom(id){ curClubId=id; clubSel={}; hideLobbySections(); renderClubRoom(); show("club-room"); }
+
+  function renderClubList(){
+    var box=document.getElementById("club-listing"); box.innerHTML="";
+    var ids=Object.keys(CLUBS);
+    if(ids.length===0){ box.innerHTML='<div class="lobby-hint" style="text-align:center;margin:8px 0">まだクラブがありません。下で作ってください。</div>'; }
+    ids.forEach(function(id){ var c=CLUBS[id]; var d=document.createElement("div"); d.className="club-item";
+      d.innerHTML='<span class="ci-name">'+esc(c.name)+'</span><span class="ci-sub">'+c.members.length+'人</span><button class="ci-del">\u00d7</button>';
+      d.onclick=function(ev){ if(ev.target.classList.contains("ci-del")) return; showClubRoom(id); };
+      d.querySelector(".ci-del").onclick=function(ev){ ev.stopPropagation(); if(confirm("「"+c.name+"」を削除しますか？（点数も消えます）")){ delete CLUBS[id]; saveClubs(); renderClubList(); } };
+      box.appendChild(d);
+    });
+  }
+  function renderClubRoom(){
+    var c=CLUBS[curClubId]; if(!c){ showClubList(); return; }
+    if(!c.cfg) c.cfg={deal:5,ronReturn:false};
+    document.getElementById("club-room-name").textContent=c.name;
+    cfgSeg("club-cfg-deal",[{val:4,label:"4枚"},{val:5,label:"5枚"}], c.cfg.deal, function(v){ c.cfg.deal=v; saveClubs(); renderClubRoom(); });
+    cfgSeg("club-cfg-ronret",[{val:false,label:"なし"},{val:true,label:"あり"}], !!c.cfg.ronReturn, function(v){ c.cfg.ronReturn=v; saveClubs(); renderClubRoom(); });
+    var box=document.getElementById("club-members"); box.innerHTML="";
+    var members=c.members.slice().sort(function(a,b){ return b.score-a.score; });
+    members.forEach(function(mem){ var sel=!!clubSel[mem.id]; var row=document.createElement("div"); row.className="cm-row"+(sel?" sel":"");
+      var scls=mem.score>0?"pos":(mem.score<0?"neg":"zero"); var sstr=(mem.score>0?"+":"")+mem.score;
+      row.innerHTML='<span class="cm-check">'+(sel?"\u2713":"")+'</span><span class="cm-name">'+esc(mem.name)+'</span><span class="cm-score '+scls+'">'+sstr+'</span><button class="cm-del">\u00d7</button>';
+      row.onclick=function(ev){ if(ev.target.classList.contains("cm-del")) return; clubSel[mem.id]=!clubSel[mem.id]; renderClubRoom(); };
+      row.querySelector(".cm-del").onclick=function(ev){ ev.stopPropagation(); if(confirm(mem.name+" を削除しますか？")){ c.members=c.members.filter(function(x){return x.id!==mem.id;}); delete clubSel[mem.id]; saveClubs(); renderClubRoom(); } };
+      box.appendChild(row);
+    });
+    var n=0; Object.keys(clubSel).forEach(function(k){ if(clubSel[k]) n++; });
+    document.getElementById("club-select-hint").textContent="今回プレイする人を3〜5人タップで選ぶ（選択中 "+n+"人）。あなたが操作し、他のメンバーはCPUが担当します。プレイした人の点数だけが記録され、次回に引き継がれます。";
+    document.getElementById("btn-club-start").disabled=(n<3||n>5);
+  }
+  function clubAddMember(){
+    var c=CLUBS[curClubId]; if(!c) return; var inp=document.getElementById("club-add-name");
+    var name=(inp.value||"").trim().slice(0,12); if(!name) return;
+    c.members.push({ id:uid(), name:name, score:0 }); inp.value=""; saveClubs(); renderClubRoom();
+  }
+  function startSelectedClubGame(){
+    var c=CLUBS[curClubId]; if(!c) return;
+    var sel=c.members.filter(function(m){ return clubSel[m.id]; });   // roster order = seat order
+    if(sel.length<3 || sel.length>5){ return; }
+    myName=sel[0].name;
+    CLUB_GAME={ clubId:curClubId, memberIds:sel.map(function(m){return m.id;}) };
+    var cfg={ deal:(c.cfg&&c.cfg.deal)||5, ronReturn:!!(c.cfg&&c.cfg.ronReturn) };
+    audioInit();
+    if(!ws || ws.readyState>1){ connect(); }
+    var t=setInterval(function(){ if(ws&&ws.readyState===1){ clearInterval(t);
+      send({type:"hello",name:myName});
+      send({type:"startClub", members:sel.map(function(m){return {name:m.name,score:m.score};}), cfg:cfg});
+    } },80);
+  }
+  function recordClubScores(){
+    if(!CLUB_GAME || !liveState || !liveState.players) return;
+    var c=CLUBS[CLUB_GAME.clubId]; if(!c) return;
+    CLUB_GAME.memberIds.forEach(function(mid,i){
+      var mem=null; for(var k=0;k<c.members.length;k++){ if(c.members[k].id===mid){ mem=c.members[k]; break; } }
+      if(mem && liveState.players[i]) mem.score=liveState.players[i].score;
+    });
+    saveClubs();
+  }
+  function leaveClubGame(){
+    recordClubScores(); CLUB_GAME=null;
+    hide("table"); hide("hand-dock"); hide("result-overlay"); hide("ron-overlay"); hide("suit-overlay");
+    var lb=document.getElementById("tenpai-btns"); if(lb) lb.classList.add("hidden");
+    var ob=document.getElementById("btn-one"); if(ob) ob.classList.add("hidden");
+    show("lobby"); hideLobbySections(); renderClubRoom(); show("club-room");
   }
 
   /* ---------- boot / wiring ---------- */
@@ -1248,6 +1374,21 @@
     else { setStatus("\u30b5\u30fc\u30d0\u30fc\u3068\u306e\u63a5\u7d9a\u304c\u5207\u308c\u3066\u3044\u307e\u3059\u3002\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u304f\u3060\u3055\u3044\u3002"); } };
   var rb=document.getElementById("btn-rules"); if(rb) rb.onclick=function(){ show("rules-overlay"); };
   var rbc=document.getElementById("btn-rules-close"); if(rbc) rbc.onclick=function(){ hide("rules-overlay"); };
+
+  var btnClub=document.getElementById("btn-club"); if(btnClub) btnClub.onclick=function(){ audioInit(); showClubList(); };
+  var clBack=document.getElementById("club-list-back"); if(clBack) clBack.onclick=showConnect;
+  var crBack=document.getElementById("club-room-back"); if(crBack) crBack.onclick=showClubList;
+  var btnCreate=document.getElementById("btn-club-create"); if(btnCreate) btnCreate.onclick=function(){
+    var inp=document.getElementById("club-new-name"); var name=(inp.value||"").trim().slice(0,20); if(!name) return;
+    var id=uid(); CLUBS[id]={ id:id, name:name, members:[], cfg:{deal:5,ronReturn:false} }; saveClubs(); inp.value=""; showClubRoom(id);
+  };
+  var btnMemAdd=document.getElementById("btn-member-add"); if(btnMemAdd) btnMemAdd.onclick=clubAddMember;
+  var addInp=document.getElementById("club-add-name"); if(addInp) addInp.addEventListener("keydown",function(e){ if(e.key==="Enter") clubAddMember(); });
+  var btnClubStart=document.getElementById("btn-club-start"); if(btnClubStart) btnClubStart.onclick=startSelectedClubGame;
+  var btnClubReset=document.getElementById("btn-club-reset"); if(btnClubReset) btnClubReset.onclick=function(){
+    var c=CLUBS[curClubId]; if(!c) return; if(confirm("「"+c.name+"」全員の点数を0に戻しますか？")){ c.members.forEach(function(m){ m.score=0; }); saveClubs(); renderClubRoom(); }
+  };
+  var btnClubBack=document.getElementById("btn-club-back"); if(btnClubBack) btnClubBack.onclick=leaveClubGame;
 
   showLobby();
 })();
