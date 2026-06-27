@@ -687,6 +687,9 @@
   .recent-item{display:flex;align-items:center;background:#0e1929;border:1px solid #24344c;border-radius:9px;padding:10px 12px;cursor:pointer;font-weight:700;font-size:14px}
   .recent-item .ri-x{margin-left:auto;color:#ff7b6e;font-size:16px;background:none;border:none;cursor:pointer}
   /* spectator banner */
+  #btn-music{position:fixed;z-index:55;top:calc(env(safe-area-inset-top,0px) + 8px);left:calc(env(safe-area-inset-left,0px) + 8px);
+    width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(10,30,22,.62);color:#ffe39a;
+    font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.4)}
   #spectate-banner{position:fixed;top:0;left:0;right:0;z-index:60;background:rgba(20,40,30,.92);color:#bff0d2;text-align:center;
     font-size:13px;font-weight:700;padding:8px env(safe-area-inset-right,0) 8px env(safe-area-inset-left,0);display:flex;align-items:center;justify-content:center;gap:12px}
   #spectate-banner button{background:#1e3a2a;border:1px solid #2e5a40;color:#bff0d2;border-radius:8px;padding:5px 12px;font:inherit;font-size:12px;font-weight:700}
@@ -787,6 +790,7 @@
     </div>
   </div>
 
+<button id="btn-music" class="hidden">&#9834;</button>
 <div id="spectate-banner" class="hidden"><span>観戦中（全員の手札が見えます）</span><button id="btn-spec-leave">やめる</button></div>
 <div id="spectate-view" class="hidden">
   <div class="spec-field" id="spec-field"></div>
@@ -992,6 +996,48 @@
   function playComboSound(){ if(!AC) return; try{ var t=AC.currentTime; beep(330,t,0.12,"square",0.22);beep(440,t+0.12,0.12,"square",0.22);
     beep(660,t+0.26,0.20,"triangle",0.28);beep(990,t+0.44,0.34,"triangle",0.26); for(var k=0;k<7;k++){beep(1400+k*170,t+0.5+k*0.04,0.10,"square",0.05);} }catch(e){} }
 
+  /* ---------- background music: generative up-tempo swing jazz ---------- */
+  var MUS_KEY="nippachi_music_on";
+  var music={ on:true, playing:false, gain:null, timer:null, beat:0, nextTime:0 };
+  try{ music.on = (localStorage.getItem(MUS_KEY)!=="0"); }catch(e){}
+  var SPB=60/172, SWING=SPB*0.64;                       // ~172bpm, triplet swing
+  // 4-bar loop  I–vi–ii–V in F major (Fmaj7 – Dm7 – Gm7 – C7)
+  var BASS=[[41,45,48,39],[38,41,45,44],[43,46,50,49],[48,52,46,42]];           // walking quarters (MIDI)
+  var COMP=[[57,60,64,67],[53,57,60,64],[58,62,65,69],[52,55,58,62]];           // comp voicings
+  var MEL=[ {b:0,o:0,m:69,d:1.4},{b:1,o:.64,m:72,d:.9},
+            {b:4,o:0,m:65,d:1.4},{b:5,o:.64,m:69,d:.9},
+            {b:8,o:0,m:70,d:1.4},{b:9,o:.64,m:74,d:.9},
+            {b:12,o:0,m:76,d:.7},{b:13,o:.64,m:74,d:.5},{b:14,o:0,m:72,d:.5},{b:15,o:.64,m:70,d:1.0} ];
+  function mfreq(m){ return 440*Math.pow(2,(m-69)/12); }
+  function mTone(m,t,dur,type,vol,lp){ if(!AC||!music.gain) return; var o=AC.createOscillator(), g=AC.createGain(), out=o;
+    o.type=type||"sine"; o.frequency.value=mfreq(m);
+    if(lp){ var f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=lp; o.connect(f); out=f; }
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.014); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    out.connect(g); g.connect(music.gain); o.start(t); o.stop(t+dur+0.03); }
+  function mCym(t,dur,hp,vol){ if(!AC||!music.gain) return; var n=Math.max(1,Math.floor(AC.sampleRate*dur)); var buf=AC.createBuffer(1,n,AC.sampleRate);
+    var d=buf.getChannelData(0); for(var i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n); var src=AC.createBufferSource(); src.buffer=buf;
+    var f=AC.createBiquadFilter(); f.type="highpass"; f.frequency.value=hp; var g=AC.createGain();
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); src.connect(f); f.connect(g); g.connect(music.gain); src.start(t); }
+  function scheduleBeat(beat,t){
+    var bar=Math.floor(beat/4)%4, bib=beat%4;
+    mTone(BASS[bar][bib], t, SPB*0.9, "triangle", 0.5, 760);          // walking bass
+    mCym(t, 0.17, 6200, 0.085);                                       // ride: every beat
+    if(bib===1||bib===3){ mCym(t+SWING, 0.15, 6600, 0.07); mCym(t, 0.05, 9500, 0.05);   // swung ride + foot hat on 2 & 4
+      COMP[bar].forEach(function(m){ mTone(m, t+0.006, 0.2, "triangle", 0.075, 2600); }); }   // comp stabs on 2 & 4
+    for(var i=0;i<MEL.length;i++){ var ev=MEL[i]; if(ev.b===beat) mTone(ev.m, t+(ev.o||0)*SPB, (ev.d||1)*SPB*0.92, "sine", 0.14, 3200); }
+  }
+  function musicLoop(){ if(!music.playing||!AC) return; var ahead=AC.currentTime+0.18;
+    while(music.nextTime<ahead){ scheduleBeat(music.beat, music.nextTime); music.nextTime+=SPB; music.beat=(music.beat+1)%16; } }
+  function musicStart(){ if(!music.on) return; audioInit(); if(!AC) return;
+    if(!music.gain){ music.gain=AC.createGain(); music.gain.gain.value=0.16; music.gain.connect(AC.destination); }
+    if(music.playing) return; music.playing=true; music.beat=0; music.nextTime=AC.currentTime+0.12;
+    music.timer=setInterval(musicLoop, 25); musicLoop(); updateMusicBtn(); }
+  function musicStop(){ music.playing=false; if(music.timer){ clearInterval(music.timer); music.timer=null; } updateMusicBtn(); }
+  function musicToggle(){ music.on=!music.on; try{ localStorage.setItem(MUS_KEY, music.on?"1":"0"); }catch(e){}
+    if(music.on){ var t=document.getElementById("table"); if(t && !t.classList.contains("hidden")) musicStart(); }
+    else musicStop(); updateMusicBtn(); }
+  function updateMusicBtn(){ var b=document.getElementById("btn-music"); if(b) b.textContent = music.on ? "\u266a" : "\uD83D\uDD07"; }
+
   /* ---------- cards ---------- */
   function rankLabel(r){ return r===1?"A":r===11?"J":r===12?"Q":r===13?"K":(""+r); }
   function cardLabel(c){ return rankLabel(c.rank)+c.suit; }
@@ -1181,7 +1227,8 @@
     else if(ev.t==="draw"){ var p=disp.players[ev.seat]; if(p.hand) p.hand.push(ev.card||{suit:"?",rank:0}); else p.count=(p.count||0)+1; if(disp.deckCount) disp.deckCount=Math.max(0,disp.deckCount-1); }
     else if(ev.t==="suitChosen"){ disp.suit=ev.suit; } }
   function animateEvent(ev){ switch(ev.t){
-    case "place": playPlaceSound(); showBubble(ev.seat, cardLabel(ev.card)+"\uff01",{red:RED[ev.card.suit]}); break;
+    case "place": playPlaceSound(); break;
+    case "comment": showBubble(ev.seat, ev.text, {gold:true}); break;
     case "draw": flyDrawTo(ev.seat); playCardSound(); break;
     case "turnDraw": showBubble(ev.seat,"\u3072\u304f",{}); break;
     case "penaltyDraw": showBubble(ev.seat,"2\u306e\u30bf\u30f3\u5869\u5f15\u304d\uff01",{gold:true}); break;
@@ -1203,7 +1250,7 @@
     case "roundVoid": showTaunt("\u6d41\u5c40"); setStatus("\u5c71\u672d\u304c3\u56de\u3064\u304d\u307e\u3057\u305f\u3002\u6d41\u5c40\u3067\u3059\u3002"); break; } }
   function delayFor(ev){ switch(ev.t){ case "place":return 480; case "combo":return 1500; case "penaltyDraw":return 250; case "starter2":return 300; case "twoEffect":return 220;
     case "starterIntro":return 1250; case "tenpo":return 1850; case "rainbow":return 1050;
-    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; case "oneCall":return 700; case "onePenalty":return 700; case "ronReturnAvailable":return 320; case "ronReturn":return 1650; case "ronReturnPass":return 200; case "roundVoid":return 1500; case "deckLast":return 1300; default:return 60; } }
+    case "draw":return 180; case "suitChosen":return 1400; case "turnDraw":return 130; case "ron":return 1450; case "ronGift":return 640; case "oneCall":return 700; case "onePenalty":return 700; case "ronReturnAvailable":return 320; case "ronReturn":return 1650; case "ronReturnPass":return 200; case "roundVoid":return 1500; case "deckLast":return 1300; case "comment":return 1050; default:return 60; } }
 
   function enqueue(events, state){ queue.push({events:events, state:state}); if(!animating) drain(); }
   function drain(){
@@ -1288,7 +1335,7 @@
     show("result-overlay"); }
 
   /* ---------- lobby ---------- */
-  function showLobby(){ show("lobby"); hide("table"); hide("hand-dock"); }
+  function showLobby(){ show("lobby"); hide("table"); hide("hand-dock"); var bm=document.getElementById("btn-music"); if(bm) bm.classList.add("hidden"); if(typeof musicStop==="function") musicStop(); }
   function cfgSeg(containerId, opts, current, onPick){
     var box=document.getElementById(containerId); if(!box) return; box.innerHTML="";
     opts.forEach(function(o){ var b=document.createElement("div"); b.className="cfg-opt"+(o.val===current?" on":"");
@@ -1346,6 +1393,7 @@
       CLUB_GAME=!!(room && room.club); if(CLUB_GAME){ clubScreen="game"; } SPECTATING=false; hide("spectate-banner"); hide("spectate-view");
       hide("lobby"); document.getElementById("table").classList.remove("hidden"); document.getElementById("hand-dock").classList.remove("hidden");
       hide("result-overlay"); hide("suit-overlay"); hide("ron-overlay"); audioInit();
+      document.getElementById("btn-music").classList.remove("hidden"); musicStart();
       render(liveState);
       if(m.startSeat!=null) setStatus("<b>"+playerName(m.startSeat)+"</b> \u304b\u3089\u30b9\u30bf\u30fc\u30c8");
       setTimeout(afterSettle, 600); return; }
@@ -1393,6 +1441,7 @@
 
   function showClubLobby(){ clubScreen="lobby"; CLUB_GAME=false; SPECTATING=false;
     hide("table"); hide("hand-dock"); hide("result-overlay"); hide("ron-overlay"); hide("suit-overlay"); hide("spectate-view"); hide("spectate-banner");
+    var bm=document.getElementById("btn-music"); if(bm) bm.classList.add("hidden"); musicStop();
     var lb=document.getElementById("tenpai-btns"); if(lb) lb.classList.add("hidden");
     var ob=document.getElementById("btn-one"); if(ob) ob.classList.add("hidden");
     show("lobby"); hideLobbySections(); show("club-room"); renderClubLobby(); }
@@ -1523,6 +1572,7 @@
     SPECTATING=true; clubScreen="spectate"; room=m.room||room; liveState=m.state;
     hide("lobby"); hide("table"); hide("hand-dock"); hide("result-overlay"); hide("ron-overlay"); hide("suit-overlay");
     show("spectate-banner"); show("spectate-view"); renderSpectate(liveState);
+    document.getElementById("btn-music").classList.remove("hidden"); musicStart();
   }
 
   /* ---------- boot / wiring ---------- */
@@ -1565,6 +1615,8 @@
   var cwBack=document.getElementById("club-wait-back"); if(cwBack) cwBack.onclick=function(){ send({type:"clubLeaveGame"}); showClubLobby(); };
   var specLeave=document.getElementById("btn-spec-leave"); if(specLeave) specLeave.onclick=leaveSpectate;
   var btnClubBack=document.getElementById("btn-club-back"); if(btnClubBack) btnClubBack.onclick=leaveClubGame;
+
+  var btnMusic=document.getElementById("btn-music"); if(btnMusic) btnMusic.onclick=musicToggle; updateMusicBtn();
 
   showLobby();
 })();
