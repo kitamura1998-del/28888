@@ -82,6 +82,20 @@ var Engine = (function(){
   }
   function setField(s,c,seat,events){ s.discard.push(c); s.suit=c.suit; s.rank=c.rank; events.push({t:"place",seat:seat,card:c}); }
 
+  // fun call-outs when a card is played
+  var SINGLE_COMMENT={1:"いっぺー",3:"さんぺいです",4:"よんちゃん",5:"ゴム",6:"むーみん",7:"なに〜",8:"いろがえ〜",9:"救急車",10:"おてん！",11:"ジェジェジェイ",12:"女王様",13:"行ける時〜"};
+  var TWO_COMMENT={3:"積み立てにーさ！",4:"西。",5:"にーご！",6:"にーむ！",7:"にーな！",10:"にってん！",11:"にーじぇ！",12:"二フィーフィー！",13:"2とでっかいところ！"};
+  function playComment(opts){
+    // opts: {type:"normal"|"two", rank, count, kabu}
+    if(opts.type==="two"){
+      if(opts.rank===8) return null;                 // 2+8 is the special combo splash
+      if(opts.rank===9) return (opts.count>=2)?"ニンニク！":"おにく！";
+      return TWO_COMMENT[opts.rank]||null;
+    }
+    if(opts.kabu) return "かっぶ。";                  // played a card of the same number as the field
+    return SINGLE_COMMENT[opts.rank]||null;
+  }
+
   function starterMult(s){
     var c=s.starter; if(!c) return 1;
     if(c.rank===10||c.rank===11||c.rank===12) return 2;
@@ -261,7 +275,10 @@ var Engine = (function(){
       removeCards(p, action.cards);
       s.rainbow=false;   // a free "rainbow" turn is consumed once a card is played
       if(v.type==="normal"){
+        var prevRank=s.rank;                                   // field number before placing (for かっぶ)
         setField(s, v.card, seat, events);
+        var cmtN=playComment({type:"normal", rank:v.card.rank, kabu:(v.card.rank===prevRank)});
+        if(cmtN) events.push({t:"comment", seat:seat, text:cmtN});
         var ctxN={kind:"normal", placer:seat, card:v.card};
         if(!checkRonOr(s, seat, v.card.rank, ctxN, events)) contNormal(s, seat, v.card, events);
       } else {
@@ -269,6 +286,7 @@ var Engine = (function(){
         v.twos.forEach(function(c){ setField(s,c,seat,events); });
         if(v.follow){ setField(s, v.follow, seat, events); }   // lay both cards now so a RON on the 2 can't drop the follow
         events.push({t:"twoEffect", seat:seat, count:count});
+        if(v.follow){ var cmtT=playComment({type:"two", rank:v.follow.rank, count:count}); if(cmtT) events.push({t:"comment", seat:seat, text:cmtT}); }
         // RON on the 2 is offered BEFORE anyone draws the 2-penalty.
         var ctx2={kind:"afterTwoRon", placer:seat, follow:(v.follow||null), count:count};
         if(!checkRonOr(s, seat, 2, ctx2, events)) afterTwoRon(s, seat, (v.follow||null), count, events);
