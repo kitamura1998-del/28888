@@ -83,7 +83,7 @@ var Engine = (function(){
   function setField(s,c,seat,events){ s.discard.push(c); s.suit=c.suit; s.rank=c.rank; events.push({t:"place",seat:seat,card:c}); }
 
   // fun call-outs when a card is played
-  var SINGLE_COMMENT={1:"いっぺー",3:"さんぺいです",4:"よんちゃん",5:"ゴム",6:"むーみん",7:"なに〜",8:"いろがえ〜",9:"救急車",10:"おてん！",11:"ジェジェジェイ",12:"女王様",13:"行ける時〜"};
+  var SINGLE_COMMENT={1:"いっぺー",3:"さんぺいです",4:"よんちゃん",5:"ゴム",6:"むーみん",7:"なに〜",8:"いろがえ〜",10:"おてん！",11:"ジェジェジェイ",13:"行ける時〜"};
   var TWO_COMMENT={3:"積み立てにーさ！",4:"西。",5:"にーご！",6:"にーむ！",7:"にーな！",10:"にってん！",11:"にーじぇ！",12:"二フィーフィー！",13:"2とでっかいところ！"};
   function playComment(opts){
     // opts: {type:"normal"|"two", rank, count, kabu}
