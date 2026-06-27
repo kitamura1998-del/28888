@@ -998,12 +998,15 @@
 
   /* ---------- background music: generative up-tempo swing jazz ---------- */
   var MUS_KEY="nippachi_music_on";
-  var music={ on:true, playing:false, gain:null, timer:null, beat:0, nextTime:0 };
+  var music={ on:true, playing:false, gain:null, timer:null, beat:0, nextTime:0, tension:0 };
   try{ music.on = (localStorage.getItem(MUS_KEY)!=="0"); }catch(e){}
-  var SPB=60/172, SWING=SPB*0.64;                       // ~172bpm, triplet swing
+  var BASE_BPM=168;
+  function curBPM(){ return BASE_BPM + music.tension*54; }            // up to ~222bpm at full tension
+  function curSPB(){ return 60/curBPM(); }
   // 4-bar loop  I–vi–ii–V in F major (Fmaj7 – Dm7 – Gm7 – C7)
   var BASS=[[41,45,48,39],[38,41,45,44],[43,46,50,49],[48,52,46,42]];           // walking quarters (MIDI)
   var COMP=[[57,60,64,67],[53,57,60,64],[58,62,65,69],[52,55,58,62]];           // comp voicings
+  var ROOT=[41,38,43,48], TENSE=[60,57,62,55];                                  // bar root (low pulse) + a tense upper tone
   var MEL=[ {b:0,o:0,m:69,d:1.4},{b:1,o:.64,m:72,d:.9},
             {b:4,o:0,m:65,d:1.4},{b:5,o:.64,m:69,d:.9},
             {b:8,o:0,m:70,d:1.4},{b:9,o:.64,m:74,d:.9},
@@ -1014,25 +1017,38 @@
     if(lp){ var f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=lp; o.connect(f); out=f; }
     g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.014); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     out.connect(g); g.connect(music.gain); o.start(t); o.stop(t+dur+0.03); }
+  function mPulse(m,t,dur,vol){ if(!AC||!music.gain) return; var o=AC.createOscillator(), g=AC.createGain();   // low drum-like thump
+    o.type="sine"; o.frequency.setValueAtTime(mfreq(m),t); o.frequency.exponentialRampToValueAtTime(mfreq(m)*0.6,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); g.connect(music.gain); o.start(t); o.stop(t+dur+0.02); }
   function mCym(t,dur,hp,vol){ if(!AC||!music.gain) return; var n=Math.max(1,Math.floor(AC.sampleRate*dur)); var buf=AC.createBuffer(1,n,AC.sampleRate);
     var d=buf.getChannelData(0); for(var i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n); var src=AC.createBufferSource(); src.buffer=buf;
     var f=AC.createBiquadFilter(); f.type="highpass"; f.frequency.value=hp; var g=AC.createGain();
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); src.connect(f); f.connect(g); g.connect(music.gain); src.start(t); }
   function scheduleBeat(beat,t){
-    var bar=Math.floor(beat/4)%4, bib=beat%4;
-    mTone(BASS[bar][bib], t, SPB*0.9, "triangle", 0.5, 760);          // walking bass
-    mCym(t, 0.17, 6200, 0.085);                                       // ride: every beat
-    if(bib===1||bib===3){ mCym(t+SWING, 0.15, 6600, 0.07); mCym(t, 0.05, 9500, 0.05);   // swung ride + foot hat on 2 & 4
-      COMP[bar].forEach(function(m){ mTone(m, t+0.006, 0.2, "triangle", 0.075, 2600); }); }   // comp stabs on 2 & 4
-    for(var i=0;i<MEL.length;i++){ var ev=MEL[i]; if(ev.b===beat) mTone(ev.m, t+(ev.o||0)*SPB, (ev.d||1)*SPB*0.92, "sine", 0.14, 3200); }
+    var bar=Math.floor(beat/4)%4, bib=beat%4, spb=curSPB(), swing=spb*0.64, T=music.tension;
+    mTone(BASS[bar][bib], t, spb*0.9, "triangle", 0.5, 760);              // walking bass
+    mCym(t, 0.17, 6200, 0.085+T*0.04);                                    // ride: every beat
+    if(bib===1||bib===3){ mCym(t+swing, 0.15, 6600, 0.07); mCym(t, 0.05, 9500, 0.05);     // swung ride + foot hat on 2 & 4
+      COMP[bar].forEach(function(m){ mTone(m, t+0.006, 0.2, "triangle", 0.075+T*0.03, 2600); }); }   // comp stabs
+    for(var i=0;i<MEL.length;i++){ var ev=MEL[i]; if(ev.b===beat) mTone(ev.m, t+(ev.o||0)*spb, (ev.d||1)*spb*0.92, "sine", 0.14, 3200); }
+    // ---- tension layers that grow with the round multiplier ----
+    if(T>0.01 && bib===0){ mTone(TENSE[bar], t, spb*3.7, "triangle", 0.02+T*0.05, 2200); }    // sustained tense pad each bar
+    if(T>=0.45){ if(bib===0||bib===2) mPulse(ROOT[bar], t, 0.16, 0.12+T*0.18); }              // low pulse on 1 & 3
+    if(T>=0.95){ mPulse(ROOT[bar]+12, t, 0.12, 0.10);                                          // every beat at max tension
+      mCym(t+swing, 0.09, 8000, 0.05); }                                                       // busier ride
   }
   function musicLoop(){ if(!music.playing||!AC) return; var ahead=AC.currentTime+0.18;
-    while(music.nextTime<ahead){ scheduleBeat(music.beat, music.nextTime); music.nextTime+=SPB; music.beat=(music.beat+1)%16; } }
+    while(music.nextTime<ahead){ scheduleBeat(music.beat, music.nextTime); music.nextTime+=curSPB(); music.beat=(music.beat+1)%16; } }
   function musicStart(){ if(!music.on) return; audioInit(); if(!AC) return;
     if(!music.gain){ music.gain=AC.createGain(); music.gain.gain.value=0.16; music.gain.connect(AC.destination); }
     if(music.playing) return; music.playing=true; music.beat=0; music.nextTime=AC.currentTime+0.12;
     music.timer=setInterval(musicLoop, 25); musicLoop(); updateMusicBtn(); }
   function musicStop(){ music.playing=false; if(music.timer){ clearInterval(music.timer); music.timer=null; } updateMusicBtn(); }
+  function setMusicIntensity(M){ M=M||1; var t=Math.max(0,Math.min(1,(M-1)/4));    // M:1→0, 5→1 (2倍/3倍/5倍で段階的に)
+    music.tension=t;
+    if(music.gain && AC){ try{ music.gain.gain.linearRampToValueAtTime(0.15+t*0.08, AC.currentTime+0.4); }catch(e){} } }
+  function clientStarterMult(c){ if(!c) return 1; if(c.rank===10||c.rank===11||c.rank===12) return 2; if(c.rank===13) return 3; if(c.rank===1&&c.suit==="\u2660") return 5; return 1; }
+  function musicTension(s){ if(!s) return; var M=clientStarterMult(s.starter)*(s.comboMult||1)*(s.tenpoMult||1); setMusicIntensity(M); }
   function musicToggle(){ music.on=!music.on; try{ localStorage.setItem(MUS_KEY, music.on?"1":"0"); }catch(e){}
     if(music.on){ var t=document.getElementById("table"); if(t && !t.classList.contains("hidden")) musicStart(); }
     else musicStop(); updateMusicBtn(); }
@@ -1152,6 +1168,7 @@
 
   function render(state){
     var s=state||liveState; if(!s) return;
+    if(typeof musicTension==="function") musicTension(s);
     var N=playerCount(); ensureSeats(N);
     var dc = s.deck?s.deck.length:(s.deckCount||0);
     document.getElementById("deck-count").textContent=dc;
@@ -1298,6 +1315,7 @@
   function ronWith(call){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"ron", call:call}); }
   function ronPass(){ if(!pendingRon) return; pendingRon=false; hide("ron-overlay"); sendAction({type:"pass"}); }
   function showResult(res){ if(!res) return;
+    if(typeof musicStop==="function") musicStop();   // pause music at the result; next round's state restarts it
     var dock=document.getElementById("hand-dock"); if(dock) dock.classList.add("hidden");   // result screen only: hide your hand
     var lb=document.getElementById("tenpai-btns"); if(lb) lb.classList.add("hidden");
     var ob=document.getElementById("btn-one"); if(ob) ob.classList.add("hidden");
@@ -1545,6 +1563,7 @@
   }
 
   function renderSpectate(s){
+    if(typeof musicTension==="function") musicTension(s);
     var fld=document.getElementById("spec-field");
     if(!s){ fld.innerHTML=""; document.getElementById("spec-players").innerHTML=""; return; }
     var top=s.discard&&s.discard.length?s.discard[s.discard.length-1]:null;
