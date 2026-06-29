@@ -14,6 +14,7 @@ const Engine = require("./engine.js");
 
 const PORT = process.env.PORT || 3000;
 const AI_DELAY = 800;        // ms between AI moves (pacing)
+const AI_DELAY_ONE = 2200;   // slower pacing while a connected human still owes a "ワン" call (gives time to tap)
 const RON_TIMEOUT = 10000;   // ms a human has to decide ron before auto-pass
 const TURN_TIMEOUT = 60000;  // ms a human has to act before auto-draw
 const NEXT_ROUND_DELAY = 6000;
@@ -208,6 +209,8 @@ function advance(room){
   const seatObj = room.seats[pend.seat];
   const isAuto = !seatObj || seatObj.isAI || !seatObj.connected;
   if(isAuto){
+    // if a connected human is sitting on 1 uncalled card, slow the CPUs so they can tap "ワン" in time
+    const owesOne = room.seats.some((sp,i)=> sp && !sp.isAI && sp.connected && s.players[i] && s.players[i].hand.length===1 && !s.players[i].calledOne);
     room.timer = setTimeout(() => {
       let action;
       if(pend.kind === "turn") action = Engine.aiPlayAction(s, pend.seat);
@@ -215,7 +218,7 @@ function advance(room){
       else if(pend.kind === "ronReturn") action = { type:"ronReturn", call:"\u30ed\u30f3\u8fd4\u3057" };  // always beneficial -> auto
       else { if(pend.drawTriggered){ action = { type:"ron", call:"\u5f15\u304d\u30ed\u30f3" }; } else { var calls=["\u30ed\u30f3","\u30c0\u30e1\u301c","\u3054\u9a70\u8d70\u69d8\u3002","\u304a\u75b2\u308c\u69d8\u3002","\u4f55\u8272\u3067\u3059\u304b\uff1f"]; action = { type:"ron", call:calls[Math.floor(Math.random()*calls.length)] }; } }
       doAction(room, pend.seat, action);
-    }, AI_DELAY);
+    }, owesOne ? AI_DELAY_ONE : AI_DELAY);
   } else {
     // wait for the human, but guard against AFK so the game never stalls
     const ms = (pend.kind === "ron" || pend.kind === "ronReturn") ? RON_TIMEOUT : TURN_TIMEOUT;
