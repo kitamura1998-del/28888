@@ -1162,7 +1162,7 @@
 
   /* ---------- render ---------- */
   var selected=[];
-  var pendingOne=false, oneCalledLocal=false;   // pendingOne: just played down to 1 card (show ワン now). oneCalledLocal: tapped ワン.
+  var oneCalledLocal=false;   // true once the player taps ワン (keeps it hidden after one tap)
   function setStatus(html){ document.getElementById("status").innerHTML=html; }
   function show(id){ document.getElementById(id).classList.remove("hidden"); }
   function hide(id){ document.getElementById(id).classList.add("hidden"); }
@@ -1227,7 +1227,7 @@
     var oneBtn=document.getElementById("btn-one");
     if(oneBtn){ var me=liveState&&liveState.players&&liveState.players[yourSeat];
       var owes=!!(me&&me.hand&&me.hand.length===1&&!me.calledOne);
-      var showOne = !oneCalledLocal && (owes || pendingOne) && liveState && liveState.phase!=="roundover" && liveState.phase!=="idle";
+      var showOne = !oneCalledLocal && owes && liveState && liveState.phase!=="roundover" && liveState.phase!=="idle";
       oneBtn.classList.toggle("hidden", !showOne); }
     if(!myTurn()){ pb.disabled=true; db.disabled=true; return; } db.disabled=false;
     var v=Engine.validatePlay(liveState,yourSeat,selectedCards()); pb.disabled=!v.ok;
@@ -1239,7 +1239,7 @@
   function sendAction(action){ waiting=true; updateControls(); send({type:"action",action:action}); }
   function humanPlay(){ if(!myTurn()) return; var v=Engine.validatePlay(liveState,yourSeat,selectedCards()); if(!v.ok) return; audioInit();
     var cards=selectedCards().map(function(c){return {suit:c.suit,rank:c.rank};});
-    var me=liveState.players[yourSeat]; if(me && me.hand && (me.hand.length-cards.length)===1){ pendingOne=true; oneCalledLocal=false; } else { pendingOne=false; }
+    oneCalledLocal=false;   // fresh play: re-arm ワン (button appears only once the server confirms 1 card)
     selected=[]; sendAction({type:"play",cards:cards}); }
   function humanDraw(){ if(!myTurn()) return; audioInit(); selected=[]; sendAction({type:"draw"}); }
 
@@ -1262,8 +1262,8 @@
     case "tenpo": showTenpo(ev.seat, ev.mult); break;
     case "ron": playRonFanfare(); showTaunt(ev.call||"\u30ed\u30f3"); showBubble(ev.seat,(ev.call||"\u30ed\u30f3")+"\uff01",{gold:true}); break;
     case "ronGift": flySeatToSeat(ev.from, ev.to, ev.card); playCardSound(); showBubble(ev.from, cardLabel(ev.card)+"\u3092\u9032\u4e0a", {red:RED[ev.card.suit]}); break;
-    case "oneCall": playCardSound(); if(ev.seat===yourSeat){ oneCalledLocal=true; pendingOne=false; } showBubble(ev.seat, "\u30ef\u30f3\u3067\u30fc\u3059\uff01", {gold:true}); break;
-    case "onePenalty": if(ev.seat===yourSeat){ pendingOne=false; } showBubble(ev.seat, "\u30ef\u30f3\u30da\u30ca\u30eb\u30c6\u30a3\uff01\uff0b2\u679a", {gold:true}); break;
+    case "oneCall": playCardSound(); if(ev.seat===yourSeat){ oneCalledLocal=true; } showBubble(ev.seat, "\u30ef\u30f3\u3067\u30fc\u3059\uff01", {gold:true}); break;
+    case "onePenalty": showBubble(ev.seat, "\u30ef\u30f3\u30da\u30ca\u30eb\u30c6\u30a3\uff01\uff0b2\u679a", {gold:true}); break;
     case "ronReturnAvailable": setStatus("\u30ed\u30f3\u8fd4\u3057\u306e\u30c1\u30e3\u30f3\u30b9\uff01"); break;
     case "ronReturn": playRonFanfare(); showTaunt("\u30ed\u30f3\u8fd4\u3057\uff01"); showBubble(ev.seat, "\u30ed\u30f3\u8fd4\u3057\uff01", {gold:true}); break;
     case "ronReturnPass": break;
@@ -1411,7 +1411,7 @@
       if(!room.started){ showLobby(); } return; }
     if(m.type==="state"){
       if(m.spectate){ enterSpectateState(m); return; }   // watching: show all hands
-      room=m.room||room; yourSeat=(m.yourSeat!=null?m.yourSeat:yourSeat); liveState=m.state; queue=[]; animating=false; waiting=false; selected=[]; pendingRon=false; pendingRonRet=false; pendingOne=false; oneCalledLocal=false;
+      room=m.room||room; yourSeat=(m.yourSeat!=null?m.yourSeat:yourSeat); liveState=m.state; queue=[]; animating=false; waiting=false; selected=[]; pendingRon=false; pendingRonRet=false; oneCalledLocal=false;
       CLUB_GAME=!!(room && room.club); if(CLUB_GAME){ clubScreen="game"; } SPECTATING=false; hide("spectate-banner"); hide("spectate-view");
       hide("lobby"); document.getElementById("table").classList.remove("hidden"); document.getElementById("hand-dock").classList.remove("hidden");
       hide("result-overlay"); hide("suit-overlay"); hide("ron-overlay"); audioInit();
@@ -1612,7 +1612,7 @@
     ronPass();
   };
   var oneB=document.getElementById("btn-one");
-  if(oneB) oneB.onclick=function(){ audioInit(); oneCalledLocal=true; pendingOne=false; send({type:"callOne"}); oneB.classList.add("hidden"); };
+  if(oneB) oneB.onclick=function(){ audioInit(); oneCalledLocal=true; send({type:"callOne"}); oneB.classList.add("hidden"); };
   Array.prototype.forEach.call(document.querySelectorAll(".tnp-btn"), function(b){
     b.onclick=function(){ audioInit(); var t=b.getAttribute("data-say"); send({type:"say", text:t}); }; });
   document.getElementById("btn-next").onclick=function(){
