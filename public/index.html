@@ -1163,6 +1163,7 @@
   /* ---------- render ---------- */
   var selected=[];
   var oneCalledLocal=false;   // true once the player taps ワン (keeps it hidden after one tap)
+  var shownMeLen=null;        // hand size currently shown on screen (so ワン never appears unless you visibly hold 1 card)
   function setStatus(html){ document.getElementById("status").innerHTML=html; }
   function show(id){ document.getElementById(id).classList.remove("hidden"); }
   function hide(id){ document.getElementById(id).classList.add("hidden"); }
@@ -1170,6 +1171,8 @@
   function render(state){
     var s=state||liveState; if(!s) return;
     if(typeof musicTension==="function") musicTension(s);
+    var meShown=s.players&&s.players[yourSeat];
+    shownMeLen = (meShown&&meShown.hand) ? meShown.hand.length : (meShown&&typeof meShown.count==="number" ? meShown.count : null);
     var N=playerCount(); ensureSeats(N);
     var dc = s.deck?s.deck.length:(s.deckCount||0);
     document.getElementById("deck-count").textContent=dc;
@@ -1227,7 +1230,7 @@
     var oneBtn=document.getElementById("btn-one");
     if(oneBtn){ var me=liveState&&liveState.players&&liveState.players[yourSeat];
       var owes=!!(me&&me.hand&&me.hand.length===1&&!me.calledOne);
-      var showOne = !oneCalledLocal && owes && liveState && liveState.phase!=="roundover" && liveState.phase!=="idle";
+      var showOne = !oneCalledLocal && owes && shownMeLen===1 && liveState && liveState.phase!=="roundover" && liveState.phase!=="idle";
       oneBtn.classList.toggle("hidden", !showOne); }
     if(!myTurn()){ pb.disabled=true; db.disabled=true; return; } db.disabled=false;
     var v=Engine.validatePlay(liveState,yourSeat,selectedCards()); pb.disabled=!v.ok;
@@ -1393,11 +1396,19 @@
   }
 
   /* ---------- websocket ---------- */
+  var wsRetry=null;
   function connect(){ var proto=(location.protocol==="https:")?"wss":"ws"; ws=new WebSocket(proto+"://"+location.host);
-    ws.onopen=function(){ send({type:"hello",name:myName}); };
+    ws.onopen=function(){ if(wsRetry){ clearTimeout(wsRetry); wsRetry=null; } send({type:"hello",name:myName});
+      // Render free tier sleeps after idle and forgets clubs in memory; on (re)connect, restore our club from the local backup
+      if(clubName){ var bk=bkLoad()[clubName]||null; send({type:"clubEnter", name:clubName, backup:bk}); }
+    };
     ws.onmessage=function(e){ var m; try{m=JSON.parse(e.data);}catch(_){return;} onMessage(m); };
-    ws.onclose=function(){ document.getElementById("lobby-msg").textContent="\u30b5\u30fc\u30d0\u30fc\u3068\u306e\u63a5\u7d9a\u304c\u5207\u308c\u307e\u3057\u305f\u3002\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u304f\u3060\u3055\u3044\u3002"; };
+    ws.onclose=function(){ var el=document.getElementById("lobby-msg"); if(el && (!clubName)) el.textContent="\u30b5\u30fc\u30d0\u30fc\u306b\u518d\u63a5\u7d9a\u4e2d\u2026";
+      if(!wsRetry) wsRetry=setTimeout(function(){ wsRetry=null; try{ connect(); }catch(e){} }, 1600); };   // auto-reconnect
   }
+  // persist the club backup before the tab is hidden/closed (iOS/Brave may evict storage otherwise)
+  window.addEventListener("pagehide", function(){ try{ if(CLUB) bkSave(CLUB); }catch(e){} });
+  document.addEventListener("visibilitychange", function(){ try{ if(document.visibilityState==="hidden" && CLUB) bkSave(CLUB); }catch(e){} });
   function onMessage(m){
     if(m.type==="hello"){ myId=m.you.id; return; }
     if(m.type==="error"){ document.getElementById("lobby-msg").textContent=m.msg; return; }
@@ -1432,7 +1443,9 @@
   var createPick={memberId:null, players:4, deal:5, ronReturn:false};
   function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch]; }); }
   function bkLoad(){ try{ return JSON.parse(localStorage.getItem(BK_KEY))||{}; }catch(e){ return {}; } }
-  function bkSave(club){ try{ var a=bkLoad(); a[club.name]={name:club.name,rev:club.rev,members:club.members}; localStorage.setItem(BK_KEY,JSON.stringify(a)); }catch(e){} }
+  function bkSave(club){ try{ if(!club||!club.name) return; var a=bkLoad(); var ex=a[club.name];
+      if(ex && (ex.rev|0) > (club.rev|0)) return;   // never overwrite a newer local backup with stale/empty data
+      a[club.name]={name:club.name,rev:(club.rev|0),members:club.members||[]}; localStorage.setItem(BK_KEY,JSON.stringify(a)); }catch(e){} }
   function recentLoad(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY))||[]; }catch(e){ return []; } }
   function recentAdd(name){ try{ var a=recentLoad().filter(function(x){return x!==name;}); a.unshift(name); localStorage.setItem(RECENT_KEY,JSON.stringify(a.slice(0,8))); }catch(e){} }
   function recentRemove(name){ try{ var a=recentLoad().filter(function(x){return x!==name;}); localStorage.setItem(RECENT_KEY,JSON.stringify(a)); }catch(e){} }
