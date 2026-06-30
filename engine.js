@@ -126,8 +126,8 @@ var Engine = (function(){
     var follow=null;
     if(others.length===1){
       follow=others[0];
-      var sm={}; twos.forEach(function(c){ sm[c.suit]=1; });
-      if(!sm[follow.suit]) return {ok:false,msg:"\u305d\u3048\u308b\u672d\u306f2\u3068\u540c\u3058\u30de\u30fc\u30af\u306b\u3057\u3066\u304f\u3060\u3055\u3044"};
+      var lastTwo=twos[twos.length-1];                     // the LAST 2 played decides the follow's suit
+      if(follow.suit!==lastTwo.suit) return {ok:false,msg:"\u305d\u3048\u672d\u306f\u6700\u5f8c\u306b\u51fa\u3057\u305f2\u3068\u540c\u3058\u30de\u30fc\u30af\u306b\u3057\u3066\u304f\u3060\u3055\u3044"};
     }
     return {ok:true,type:"two",twos:twos,follow:follow};
   }
@@ -195,17 +195,20 @@ var Engine = (function(){
   function contTwoNoFollow(s, placer, count, events){ advance(s, events); }
 
   function afterTwoRon(s, placer, follow, count, events){
-    // the 2 was not ron'd: now apply the 2-penalty draws to everyone else, then resolve the follow card
+    // the 2 was not ron'd: apply the 2-penalty draws to everyone else, then resolve the follow card
     var n=s.players.length;
-    var sd=nextSeat(placer, n);
-    for(var st=0; st<n-1; st++){ give(s, sd, 2*count, events); sd=nextSeat(sd, n); }
+    var bareWin=(s.players[placer].hand.length===0 && !follow);   // went out on bare 2(s), no follow -> 2-effect is VOID
+    if(!bareWin){
+      var sd=nextSeat(placer, n);
+      for(var st=0; st<n-1; st++){ give(s, sd, 2*count, events); sd=nextSeat(sd, n); }
+    }
     if(follow){
       var ctxF={kind:"twoFollow", placer:placer, follow:follow, count:count};
       // everyone just drew their 2-penalty cards above, so any RON found here is a "引きロン" (drawn into it)
       if(!checkRonOr(s, placer, follow.rank, ctxF, events, true)) contTwoFollow(s, placer, follow, count, events);
     } else {
-      // 2 with no follow: if the placer just played their LAST card(s) and went out,
-      // they WIN — no 1-card no-follow penalty. (Others already drew their 2-penalty above.)
+      // 2 with no follow: if the placer just played their LAST card(s) and went out, they WIN
+      // (no 1-card no-follow penalty, and per rule the others do NOT draw the 2-penalty).
       if(s.players[placer].hand.length===0){
         scoreRound(s, placer);
         events.push({t:"roundOver"});
@@ -285,7 +288,8 @@ var Engine = (function(){
         var count=v.twos.length;
         v.twos.forEach(function(c){ setField(s,c,seat,events); });
         if(v.follow){ setField(s, v.follow, seat, events); }   // lay both cards now so a RON on the 2 can't drop the follow
-        events.push({t:"twoEffect", seat:seat, count:count});
+        var bareWin2=(s.players[seat].hand.length===0 && !v.follow);   // going out on bare 2(s): no 2-effect
+        if(!bareWin2) events.push({t:"twoEffect", seat:seat, count:count});
         if(v.follow){ var cmtT=playComment({type:"two", rank:v.follow.rank, count:count}); if(cmtT) events.push({t:"comment", seat:seat, text:cmtT}); }
         // RON on the 2 is offered BEFORE anyone draws the 2-penalty.
         var ctx2={kind:"afterTwoRon", placer:seat, follow:(v.follow||null), count:count};
@@ -387,7 +391,12 @@ var Engine = (function(){
       var follow=null;
       for(var i=0;i<rest.length;i++){ if(twoSuits[rest[i].suit]){ follow=rest[i]; break; } }
       var cards=allTwos.map(function(c){return {suit:c.suit,rank:c.rank};});
-      if(follow) cards.push({suit:follow.suit,rank:follow.rank});
+      if(follow){
+        // make sure a 2 of the follow's suit is played LAST (new rule: follow matches the last 2)
+        var idx=-1; for(var k=0;k<cards.length;k++){ if(cards[k].suit===follow.suit){ idx=k; } }
+        if(idx>=0){ var mv=cards.splice(idx,1)[0]; cards.push(mv); }
+        cards.push({suit:follow.suit,rank:follow.rank});
+      }
       return {type:"play", cards:cards};
     }
     var nonEight=playable.filter(function(c){return c.rank!==8;});
