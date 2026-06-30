@@ -64,6 +64,42 @@ function roomInfo(room){
 /* ---------------- clubs (leagues shared across devices) ---------------- */
 const clubs = {};      // name -> { name, rev, members:[{id,name,score}] }
 const clubSubs = {};   // name -> Set<ws> (clients viewing the club lobby)
+
+/* ---- durable storage via Upstash Redis REST (optional; works with plain fetch, no extra libs) ----
+   Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Render to enable cross-device persistence. */
+const KV_URL = (process.env.UPSTASH_REDIS_REST_URL || "").replace(/\/+$/,"");
+const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "";
+const KV_ON = !!(KV_URL && KV_TOKEN);
+const CLUBS_KEY = "nippachi:clubs:v1";
+async function kvCmd(cmd){
+  if(!KV_ON) return null;
+  const r = await fetch(KV_URL, { method:"POST",
+    headers:{ Authorization:"Bearer "+KV_TOKEN, "Content-Type":"application/json" },
+    body: JSON.stringify(cmd) });
+  if(!r.ok) throw new Error("kv http "+r.status);
+  const j = await r.json();
+  return j.result;
+}
+async function loadClubs(){
+  if(!KV_ON){ console.log("clubs: in-memory only (no Upstash env set)"); return; }
+  try{
+    const raw = await kvCmd(["GET", CLUBS_KEY]);
+    if(raw){ const obj=JSON.parse(raw); Object.keys(obj).forEach(n=>{ const c=obj[n]; if(c&&c.name) clubs[n]={ name:c.name, rev:c.rev|0, members:Array.isArray(c.members)?c.members:[] }; }); }
+    console.log("clubs: loaded "+Object.keys(clubs).length+" from Upstash");
+  }catch(e){ console.error("clubs load failed:", e.message); }
+}
+let kvSaveTimer=null, kvSavePending=false;
+function persistClubs(){
+  if(!KV_ON) return;
+  if(kvSaveTimer){ kvSavePending=true; return; }   // debounce: coalesce bursts of changes
+  const doSave=()=>{
+    kvSaveTimer=setTimeout(()=>{ kvSaveTimer=null; if(kvSavePending){ kvSavePending=false; doSave(); } }, 1200);
+    const snapshot={}; Object.keys(clubs).forEach(n=>{ const c=clubs[n]; snapshot[n]={name:c.name,rev:c.rev,members:c.members}; });
+    kvCmd(["SET", CLUBS_KEY, JSON.stringify(snapshot)]).catch(e=>console.error("clubs save failed:", e.message));
+  };
+  doSave();
+}
+
 function memberId(){ return "m"+(nextId++)+Math.random().toString(36).slice(2,6); }
 function clubGames(name){ return Object.keys(rooms).map(k=>rooms[k]).filter(r => r.clubName===name); }
 function memberBusy(name, mid){ return clubGames(name).some(r => (r.seatMember||[]).indexOf(mid)>=0); }
@@ -82,7 +118,7 @@ function broadcastClub(name){
 function saveClubScores(room){
   const c=clubs[room.clubName]; if(!c || !room.state) return;
   (room.seatMember||[]).forEach((mid,seat)=>{ const mm=c.members.find(x=>x.id===mid); if(mm && room.state.players[seat]) mm.score=room.state.players[seat].score; });
-  c.rev++; broadcastClub(room.clubName);
+  c.rev++; persistClubs(); broadcastClub(room.clubName);
 }
 // spectators see EVERY hand (deck order stays hidden)
 function spectatorView(s){
@@ -303,9 +339,11 @@ wss.on("connection", (ws) => {
       let c=clubs[name];
       const sanitize=(arr)=> (Array.isArray(arr)?arr:[]).map(x=>({ id:(x&&x.id)||memberId(), name:String((x&&x.name)||"?").slice(0,12), score:(x&&x.score|0)||0 }));
       if(!c){
-        c={ name, rev:(backup&&(backup.rev|0))||0, members: backup?sanitize(backup.members):[] };
-        clubs[name]=c;
-      } else if(backup && (backup.rev|0) > c.rev){      // client has newer data (server restarted) -> restore
+        // Not in memory. With a DB (loaded at startup) an absent club is genuinely new -> start empty.
+        // Without a DB, fall back to the client's localStorage backup so the league can be recovered.
+        c={ name, rev: KV_ON?0:((backup&&(backup.rev|0))||0), members: (KV_ON?[]:(backup?sanitize(backup.members):[])) };
+        clubs[name]=c; persistClubs();
+      } else if(!KV_ON && backup && (backup.rev|0) > c.rev){   // legacy recovery only when there is no DB
         c.members=sanitize(backup.members); c.rev=backup.rev|0;
       }
       // leave any previous club subscription
@@ -320,23 +358,23 @@ wss.on("connection", (ws) => {
       const c=clubs[client.club]; if(!c) return;
       const nm=(m.name||"").trim().slice(0,12); if(!nm) return;
       c.members.push({ id:memberId(), name:nm, score:0 }); c.rev++;
-      broadcastClub(client.club); return;
+      persistClubs(); broadcastClub(client.club); return;
     }
     if(m.type === "clubRemoveMember"){
       const c=clubs[client.club]; if(!c) return;
       if(memberBusy(client.club, m.memberId)){ sendTo(ws,{type:"clubError",msg:"プレイ中の人は消せません"}); return; }
       c.members=c.members.filter(x=>x.id!==m.memberId); c.rev++;
-      broadcastClub(client.club); return;
+      persistClubs(); broadcastClub(client.club); return;
     }
     if(m.type === "clubResetScores"){
       const c=clubs[client.club]; if(!c) return;
-      c.members.forEach(x=>x.score=0); c.rev++; broadcastClub(client.club); return;
+      c.members.forEach(x=>x.score=0); c.rev++; persistClubs(); broadcastClub(client.club); return;
     }
     if(m.type === "clubDelete"){
       const name=client.club; const c=clubs[name]; if(!c) return;
       clubGames(name).forEach(r => { if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer); delete rooms[r.code]; });
       const subs=clubSubs[name];
-      delete clubs[name]; delete clubSubs[name];
+      delete clubs[name]; delete clubSubs[name]; persistClubs();
       if(subs) subs.forEach(w => sendTo(w, { type:"clubDeleted", name }));   // kick everyone back to the entry screen
       return;
     }
@@ -501,4 +539,6 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(PORT, () => { console.log("2と8 server on http://localhost:" + PORT); });
+loadClubs().then(()=>{
+  server.listen(PORT, () => { console.log("2と8 server on http://localhost:" + PORT + (KV_ON?" (clubs persisted to Upstash)":"")); });
+});
