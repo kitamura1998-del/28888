@@ -73,12 +73,17 @@ const KV_ON = !!(KV_URL && KV_TOKEN);
 const CLUBS_KEY = "nippachi:clubs:v1";
 async function kvCmd(cmd){
   if(!KV_ON) return null;
-  const r = await fetch(KV_URL, { method:"POST",
-    headers:{ Authorization:"Bearer "+KV_TOKEN, "Content-Type":"application/json" },
-    body: JSON.stringify(cmd) });
-  if(!r.ok) throw new Error("kv http "+r.status);
-  const j = await r.json();
-  return j.result;
+  const controller = new AbortController();
+  const tid = setTimeout(()=>controller.abort(), 5000);   // 5s timeout
+  try{
+    const r = await fetch(KV_URL, { method:"POST",
+      headers:{ Authorization:"Bearer "+KV_TOKEN, "Content-Type":"application/json" },
+      body: JSON.stringify(cmd), signal: controller.signal });
+    clearTimeout(tid);
+    if(!r.ok) throw new Error("kv http "+r.status);
+    const j = await r.json();
+    return j.result;
+  }finally{ clearTimeout(tid); }
 }
 async function loadClubs(){
   if(!KV_ON){ console.log("clubs: in-memory only (no Upstash env set)"); return; }
@@ -539,6 +544,6 @@ wss.on("connection", (ws) => {
   });
 });
 
-loadClubs().then(()=>{
+loadClubs().catch(e=>console.error("loadClubs error:", e.message)).then(()=>{
   server.listen(PORT, () => { console.log("2と8 server on http://localhost:" + PORT + (KV_ON?" (clubs persisted to Upstash)":"")); });
 });
