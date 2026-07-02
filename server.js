@@ -71,6 +71,8 @@ const KV_URL = (process.env.UPSTASH_REDIS_REST_URL || "").replace(/\/+$/,"");
 const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "";
 const KV_ON = !!(KV_URL && KV_TOKEN);
 const CLUBS_KEY = "nippachi:clubs:v1";
+const ROOMS_KEY = "nippachi:rooms:v1";
+let kvReady = !KV_ON;   // until the initial load succeeds, never write (protects the DB from being wiped by an empty snapshot)
 async function kvCmd(cmd){
   if(!KV_ON) return null;
   const controller = new AbortController();
@@ -86,16 +88,35 @@ async function kvCmd(cmd){
   }finally{ clearTimeout(tid); }
 }
 async function loadClubs(){
-  if(!KV_ON){ console.log("clubs: in-memory only (no Upstash env set)"); return; }
-  try{
-    const raw = await kvCmd(["GET", CLUBS_KEY]);
-    if(raw){ const obj=JSON.parse(raw); Object.keys(obj).forEach(n=>{ const c=obj[n]; if(c&&c.name) clubs[n]={ name:c.name, rev:c.rev|0, members:Array.isArray(c.members)?c.members:[] }; }); }
-    console.log("clubs: loaded "+Object.keys(clubs).length+" from Upstash");
-  }catch(e){ console.error("clubs load failed:", e.message); }
+  const raw = await kvCmd(["GET", CLUBS_KEY]);
+  if(raw){ const obj=JSON.parse(raw); Object.keys(obj).forEach(n=>{ const c=obj[n]; if(c&&c.name) clubs[n]={ name:c.name, rev:c.rev|0, members:Array.isArray(c.members)?c.members:[] }; }); }
+  console.log("clubs: loaded "+Object.keys(clubs).length+" from Upstash");
+}
+const ROOM_TTL = 24*60*60*1000;   // (kept for reference; club rooms are no longer auto-deleted)
+function serializeRoom(r){
+  return { code:r.code, clubName:r.clubName, targetCount:r.targetCount, config:r.config,
+           seatMember:r.seatMember, hostName:r.hostName, started:!!r.started, state:r.state,
+           seats:(r.seats||[]).map(s=> s? {name:s.name, isAI:!!s.isAI} : null),
+           lastActive:r.lastActive||Date.now() };
+}
+async function loadRooms(){
+  const raw = await kvCmd(["GET", ROOMS_KEY]);
+  let n=0;
+  if(raw){ const arr=JSON.parse(raw);
+    (Array.isArray(arr)?arr:[]).forEach(d=>{
+      if(!d || !d.code || !d.clubName || !clubs[d.clubName]) return;
+      rooms[d.code]={ code:d.code, clubName:d.clubName, targetCount:d.targetCount, config:d.config||{players:4,deal:5,ronReturn:false},
+        seatMember:d.seatMember||[], hostName:d.hostName, hostId:null, started:!!d.started, state:d.state||null,
+        seats:(d.seats||[]).map(s=> s? {id:null, ws:null, name:s.name, isAI:!!s.isAI, connected:false} : null),
+        spectators:[], timer:null, nextTimer:null, nextReady:[], lastActive:d.lastActive||Date.now() };
+      n++;
+    });
+  }
+  console.log("rooms: restored "+n+" club game(s) from Upstash");
 }
 let kvSaveTimer=null, kvSavePending=false;
 function persistClubs(){
-  if(!KV_ON) return;
+  if(!KV_ON || !kvReady) return;
   if(kvSaveTimer){ kvSavePending=true; return; }   // debounce: coalesce bursts of changes
   const doSave=()=>{
     kvSaveTimer=setTimeout(()=>{ kvSaveTimer=null; if(kvSavePending){ kvSavePending=false; doSave(); } }, 1200);
@@ -104,6 +125,19 @@ function persistClubs(){
   };
   doSave();
 }
+let roomSaveTimer=null, roomSavePending=false;
+function persistRooms(){
+  if(!KV_ON || !kvReady) return;
+  if(roomSaveTimer){ roomSavePending=true; return; }
+  const doSave=()=>{
+    roomSaveTimer=setTimeout(()=>{ roomSaveTimer=null; if(roomSavePending){ roomSavePending=false; doSave(); } }, 2500);
+    const arr=Object.keys(rooms).map(k=>rooms[k]).filter(r=>r.clubName).map(serializeRoom);
+    kvCmd(["SET", ROOMS_KEY, JSON.stringify(arr)]).catch(e=>console.error("rooms save failed:", e.message));
+  };
+  doSave();
+}
+function touchRoom(room){ if(!room) return; room.lastActive=Date.now(); if(room.clubName) persistRooms(); }
+// club rooms are PERMANENT: they are only removed when a member deletes them (or the club is deleted)
 
 function memberId(){ return "m"+(nextId++)+Math.random().toString(36).slice(2,6); }
 function clubGames(name){ return Object.keys(rooms).map(k=>rooms[k]).filter(r => r.clubName===name); }
@@ -198,6 +232,7 @@ function broadcastState(room, startSeat){
     const full = spectatorView(room.state);
     room.spectators.forEach(sp => sendTo(sp.ws, { type:"state", state:full, yourSeat:-1, spectate:true, startSeat:(startSeat==null?null:startSeat), room:roomInfo(room) }));
   }
+  touchRoom(room);
 }
 function broadcastEvents(room, events){
   room.seats.forEach((s, seat) => {
@@ -208,6 +243,7 @@ function broadcastEvents(room, events){
     const full = spectatorView(room.state);
     room.spectators.forEach(sp => sendTo(sp.ws, { type:"events", events:events, state:full, spectate:true }));
   }
+  touchRoom(room);
 }
 
 /* ---------------- game flow ---------------- */
@@ -377,7 +413,7 @@ wss.on("connection", (ws) => {
     }
     if(m.type === "clubDelete"){
       const name=client.club; const c=clubs[name]; if(!c) return;
-      clubGames(name).forEach(r => { if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer); delete rooms[r.code]; });
+      clubGames(name).forEach(r => { if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer); delete rooms[r.code]; }); persistRooms();
       const subs=clubSubs[name];
       delete clubs[name]; delete clubSubs[name]; persistClubs();
       if(subs) subs.forEach(w => sendTo(w, { type:"clubDeleted", name }));   // kick everyone back to the entry screen
@@ -402,20 +438,42 @@ wss.on("connection", (ws) => {
       room.hostId=client.id; room.hostName=mem.name;
       room.seats[0]={ id:client.id, name:mem.name, isAI:false, connected:true, ws };
       room.seatMember[0]=m.memberId; client.room=room.code;
+      touchRoom(room);
       sendGameLobby(room); broadcastClub(client.club);
       return;
     }
     if(m.type === "clubJoinGame"){
       const room=rooms[m.gameId]; const c=clubs[client.club];
       if(!room || !c || room.clubName!==client.club){ sendTo(ws,{type:"clubError",msg:"そのゲームが見つかりません"}); return; }
-      if(room.started){ sendTo(ws,{type:"clubError",msg:"もう始まっています（観戦できます）"}); return; }
       const mem=c.members.find(x=>x.id===m.memberId);
       if(!mem){ sendTo(ws,{type:"clubError",msg:"自分の名前を選んでください"}); return; }
-      if((room.seatMember||[]).indexOf(m.memberId)>=0){ sendTo(ws,{type:"clubError",msg:"その人はもう参加しています"}); return; }
+      const mySeat=(room.seatMember||[]).indexOf(m.memberId);
+      if(mySeat>=0){
+        // this member already has a seat here -> RECONNECT to it (after phone lock, app switch, or server restart)
+        const cur=room.seats[mySeat];
+        if(cur && cur.connected){ sendTo(ws,{type:"clubError",msg:"その人はもう参加しています"}); return; }
+        room.seats[mySeat]={ id:client.id, name:mem.name, isAI:false, connected:true, ws };
+        client.room=room.code;
+        if(!room.hostId) room.hostId=client.id;
+        touchRoom(room);
+        if(room.started && room.state){
+          sendTo(ws, { type:"state", state:Engine.redactFor(room.state, mySeat), yourSeat:mySeat, room:roomInfo(room) });
+          broadcastClub(client.club);
+          if(Engine.pending(room.state).kind==="roundover"){ broadcastNextStatus(room); }
+          else advance(room);   // resume a paused game
+        } else {
+          sendGameLobby(room); broadcastClub(client.club);
+          const joined=room.seats.filter(s=>s&&!s.isAI&&s.connected).length;
+          if(joined>=room.targetCount) startClubGame(room);
+        }
+        return;
+      }
+      if(room.started){ sendTo(ws,{type:"clubError",msg:"もう始まっています（観戦できます）"}); return; }
       if(memberBusy(client.club, m.memberId)){ sendTo(ws,{type:"clubError",msg:"その人は別のゲームに参加中です"}); return; }
       const seat=firstEmptySeat(room); if(seat<0 || seat>=room.targetCount){ sendTo(ws,{type:"clubError",msg:"満員です"}); return; }
       room.seats[seat]={ id:client.id, name:mem.name, isAI:false, connected:true, ws };
       room.seatMember[seat]=m.memberId; client.room=room.code;
+      touchRoom(room);
       sendGameLobby(room); broadcastClub(client.club);
       const joined=room.seats.filter(s=>s&&!s.isAI&&s.connected).length;
       if(joined>=room.targetCount) startClubGame(room);    // everyone here -> go
@@ -430,22 +488,34 @@ wss.on("connection", (ws) => {
       sendTo(ws,{ type:"state", state: room.state?spectatorView(room.state):null, yourSeat:-1, spectate:true, room:roomInfo(room) });
       return;
     }
+    if(m.type === "clubDeleteGame"){
+      const r=rooms[m.gameId];
+      if(!r || r.clubName!==client.club){ sendTo(ws,{type:"clubError",msg:"そのゲームが見つかりません"}); return; }
+      if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer);
+      if(r.started && r.state) saveClubScores(r);            // keep the latest league scores
+      // tell everyone seated / watching that the game is gone
+      r.seats.forEach(s=>{ if(s && !s.isAI && s.connected && s.ws) sendTo(s.ws, { type:"gameDeleted", gameId:r.code }); });
+      (r.spectators||[]).forEach(sp=> sendTo(sp.ws, { type:"gameDeleted", gameId:r.code }));
+      delete rooms[r.code]; persistRooms(); broadcastClub(client.club);
+      return;
+    }
     if(m.type === "clubLeaveGame"){
       if(client.spectating){ const r=rooms[client.spectating]; if(r&&r.spectators) r.spectators=r.spectators.filter(sp=>sp.id!==client.id); client.spectating=null; }
       if(client.room){ const r=rooms[client.room];
         if(r){ const seat=seatOfClient(r,client.id);
           if(seat>=0){
             if(!r.started){ r.seats[seat]=null; if(r.seatMember) r.seatMember[seat]=null;
-              if(r.clubName && r.seats.filter(x=>x&&!x.isAI&&x.connected).length===0){ delete rooms[r.code]; broadcastClub(r.clubName); }
-              else { sendGameLobby(r); broadcastClub(r.clubName); } }
+              const seatedMembers=(r.seatMember||[]).filter(Boolean).length;
+              if(r.clubName && seatedMembers===0){ delete rooms[r.code]; persistRooms(); broadcastClub(r.clubName); }
+              else { touchRoom(r); sendGameLobby(r); broadcastClub(r.clubName); } }
             else {   // started game: hand the seat to AI, keep the others playing
               r.seats[seat].connected=false;
               if(connectedHumans(r).length===0){
                 if(r.timer) clearTimeout(r.timer); if(r.nextTimer) clearTimeout(r.nextTimer);
-                if(r.clubName) saveClubScores(r);
-                delete rooms[r.code];
-              } else if(Engine.pending(r.state).kind==="roundover"){ broadcastNextStatus(r); maybeStartNext(r); }
-              else advance(r);
+                if(r.clubName){ saveClubScores(r); touchRoom(r); }   // pause & KEEP the club game (delete only via the 削除 button)
+                else delete rooms[r.code];
+              } else if(Engine.pending(r.state).kind==="roundover"){ touchRoom(r); broadcastNextStatus(r); maybeStartNext(r); }
+              else { touchRoom(r); advance(r); }
               if(r.clubName) broadcastClub(r.clubName);
             }
           }
@@ -518,21 +588,32 @@ wss.on("connection", (ws) => {
     const seat = seatOfClient(room, client.id);
     if(seat < 0) return;
     if(!room.started){
-      room.seats[seat] = null;                       // free the seat in lobby
-      if(room.seatMember) room.seatMember[seat]=null;
-      if(room.hostId === client.id){ const h = room.seats.find(x=>x&&!x.isAI); room.hostId = h?h.id:null; }
-      if(connectedHumans(room).length === 0){ delete rooms[room.code]; if(room.clubName) broadcastClub(room.clubName); }
-      else { if(room.clubName){ sendGameLobby(room); broadcastClub(room.clubName); } else broadcastRoom(room); }
+      if(room.clubName){
+        // club waiting room: keep the member's seat reserved so they can come back
+        // (phone lock / app switch closes the socket — that must NOT destroy the room)
+        room.seats[seat].connected=false; room.seats[seat].ws=null; room.seats[seat].id=null;
+        if(room.hostId === client.id){ const h = room.seats.find(x=>x&&!x.isAI&&x.connected); room.hostId = h?h.id:null; }
+        touchRoom(room); sendGameLobby(room); broadcastClub(room.clubName);
+      } else {
+        room.seats[seat] = null;                       // free the seat in lobby
+        if(room.hostId === client.id){ const h = room.seats.find(x=>x&&!x.isAI); room.hostId = h?h.id:null; }
+        if(connectedHumans(room).length === 0){ delete rooms[room.code]; }
+        else { broadcastRoom(room); }
+      }
     } else {
       room.seats[seat].connected = false;            // hand over to AI mid-game
       if(connectedHumans(room).length === 0){
         if(room.timer) clearTimeout(room.timer);
         if(room.nextTimer) clearTimeout(room.nextTimer);
-        if(room.clubName) saveClubScores(room);      // keep the latest league scores before dropping the room
-        delete rooms[room.code];
-        if(room.clubName) broadcastClub(room.clubName);
+        if(room.clubName){
+          saveClubScores(room);      // keep the latest league scores
+          touchRoom(room);           // PAUSE the game but KEEP the room; players can rejoin from the club lobby
+          broadcastClub(room.clubName);
+        } else {
+          delete rooms[room.code];
+        }
       } else {
-        if(room.clubName) broadcastClub(room.clubName); else broadcastRoom(room);
+        if(room.clubName){ touchRoom(room); broadcastClub(room.clubName); } else broadcastRoom(room);
         if(Engine.pending(room.state).kind === "roundover"){
           broadcastNextStatus(room);   // a leaver no longer needs to press "next"
           maybeStartNext(room);
@@ -544,6 +625,13 @@ wss.on("connection", (ws) => {
   });
 });
 
-loadClubs().catch(e=>console.error("loadClubs error:", e.message)).then(()=>{
+(async ()=>{
+  if(KV_ON){
+    try{ await loadClubs(); await loadRooms(); kvReady=true; }
+    catch(e){ console.error("KV load failed (writes disabled to protect data):", e.message);
+      // retry in the background until it works, then allow writes
+      const retry=setInterval(async ()=>{ try{ await loadClubs(); await loadRooms(); kvReady=true; clearInterval(retry); console.log("KV recovered"); }catch(_){} }, 30000);
+    }
+  } else { console.log("clubs: in-memory only (no Upstash env set)"); }
   server.listen(PORT, () => { console.log("2と8 server on http://localhost:" + PORT + (KV_ON?" (clubs persisted to Upstash)":"")); });
-});
+})();
