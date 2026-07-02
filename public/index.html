@@ -1414,6 +1414,13 @@
     if(m.type==="error"){ document.getElementById("lobby-msg").textContent=m.msg; return; }
     if(m.type==="club"){ onClub(m.club); return; }
     if(m.type==="clubDeleted"){ onClubDeleted(m.name); return; }
+    if(m.type==="gameDeleted"){
+      if(typeof musicStop==="function") musicStop();
+      SPECTATING=false; CLUB_GAME=false;
+      hide("spectate-view"); hide("spectate-banner"); document.getElementById("table").classList.add("hidden"); hide("result-overlay");
+      if(clubName){ showClubLobby(); } else { showLobby(); }
+      alert("このゲームは削除されました。");
+      return; }
     if(m.type==="clubError"){ alert(m.msg||"エラー"); return; }
     if(m.type==="gameLobby"){ onGameLobby(m.lobby, m.youSeat); return; }
     if(m.type==="room"){ room=m.room; yourSeat=m.yourSeat;
@@ -1504,7 +1511,11 @@
       row.innerHTML='<div class="cg-top">'+badge+'<span class="cg-names">'+names+'</span></div>';
       var btns=document.createElement("div"); btns.className="cg-btns";
       if(!g.started){ var jb=document.createElement("button"); jb.className="cg-join"; jb.textContent="参加する"; jb.onclick=function(){ startJoin(g); }; btns.appendChild(jb); }
-      else { var sb=document.createElement("button"); sb.textContent="観戦する"; sb.onclick=function(){ send({type:"clubSpectate", gameId:g.gameId}); }; btns.appendChild(sb); }
+      else { var rb=document.createElement("button"); rb.className="cg-join"; rb.textContent="復帰する"; rb.onclick=function(){ startJoin(g); }; btns.appendChild(rb);
+             var sb=document.createElement("button"); sb.textContent="観戦する"; sb.onclick=function(){ send({type:"clubSpectate", gameId:g.gameId}); }; btns.appendChild(sb); }
+      var db=document.createElement("button"); db.textContent="削除"; db.style.color="#ff9b9b";
+      db.onclick=function(){ if(confirm("このゲームを削除しますか？（成績はクラブに保存済みです）")) send({type:"clubDeleteGame", gameId:g.gameId}); };
+      btns.appendChild(db);
       row.appendChild(btns); gbox.appendChild(row);
     });
   }
@@ -1525,16 +1536,18 @@
 
   function startJoin(g){ clubScreen="wait"; hideLobbySections(); renderJoinPick(g); show("club-wait"); }
   function renderJoinPick(g){
-    document.getElementById("club-wait-info").textContent=(g.host?(esc(g.host)+"さんのゲーム"):"ゲーム")+"（"+g.joined+"/"+g.count+"）に参加";
+    document.getElementById("club-wait-info").textContent=(g.host?(esc(g.host)+"さんのゲーム"):"ゲーム")+"（"+g.joined+"/"+g.count+"）に"+(g.started?"復帰":"参加");
     var seats=document.getElementById("club-wait-seats"); seats.innerHTML="";
     (g.players||[]).forEach(function(nm,i){ var r=document.createElement("div"); r.className="seat-row"; r.innerHTML='<span class="sr-seat">'+(i+1)+'</span><span class="sr-name">'+esc(nm)+'</span><span class="sr-tag">参加済み</span>'; seats.appendChild(r); });
     document.getElementById("club-wait-pick").classList.remove("hidden");
     var mb=document.getElementById("club-join-members"); mb.innerHTML="";
     var taken=g.players||[];
-    (CLUB?CLUB.members:[]).forEach(function(mem){ if(taken.indexOf(mem.name)>=0) return; var row=document.createElement("div"); row.className="cm-row";
-      row.innerHTML='<span class="cm-name">'+esc(mem.name)+'</span>';
+    (CLUB?CLUB.members:[]).forEach(function(mem){
+      var seated=taken.indexOf(mem.name)>=0;   // seated members stay listed so they can reconnect
+      var row=document.createElement("div"); row.className="cm-row";
+      row.innerHTML='<span class="cm-name">'+esc(mem.name)+'</span>'+(seated?'<span class="cm-score zero">復帰</span>':'');
       row.onclick=function(){ send({type:"clubJoinGame", gameId:g.gameId, memberId:mem.id}); }; mb.appendChild(row); });
-    document.getElementById("club-wait-hint").textContent="自分の名前をタップすると参加します。全員そろうと自動でスタート。";
+    document.getElementById("club-wait-hint").textContent= g.started? "自分の名前をタップすると対局に復帰します。" : "自分の名前をタップすると参加します。全員そろうと自動でスタート。切断しても席は残ります（同じ名前で復帰）。";
   }
   function showClubWait(lobby, youSeat){ clubScreen="wait"; hideLobbySections(); renderWait(lobby, youSeat); show("club-wait"); }
   function renderWait(lobby, youSeat){
